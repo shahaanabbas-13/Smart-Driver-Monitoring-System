@@ -217,10 +217,7 @@
       @keyframes alert-pulse { to { background: #8a2632; } }
       .pull-over-sim { display:none; margin-top:10px; padding:10px; border-radius:8px; background:#101923; font-size:12px; }
       .pull-over-sim.active { display:block; }
-      .road-scene { height:42px; position:relative; overflow:hidden; margin-top:6px; background:linear-gradient(to bottom, #43505b 0 68%, #243a2e 68%); border-radius:5px; }
-      .road-scene::before { content:""; position:absolute; left:0; right:0; top:32%; border-top:2px dashed #d7d9c7; }
-      .road-car { position:absolute; left:18%; top:10px; width:34px; height:16px; border-radius:5px; background:#48d9ed; box-shadow:0 0 9px #48d9ed88; animation:pull-over 5s ease-in-out infinite alternate; }
-      @keyframes pull-over { 0%,15% { transform:translate(0,0); } 80%,100% { transform:translate(130px,12px); } }
+      #pullOverCanvas { display:block; width:100%; height:auto; margin-top:8px; border-radius:6px; background:#09111b; }
 
       .api-row {
         display: flex;
@@ -285,6 +282,9 @@
         opacity: 0.5;
         cursor: not-allowed;
       }
+      .ignition-demo { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:12px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; }
+      .ignition-demo .metric-note { margin:0; }
+      #ignitionToggle.ignition-off { background:#4b252b; border-color:#ff5964; }
     </style>
   </head>
   <body>
@@ -305,7 +305,7 @@
       <div class="section-title">Driver safety overview</div>
       <div class="safety-alert" id="safetyAlert" role="alert" aria-live="assertive"></div>
       <div class="pull-over-sim" id="pullOverSimulation" aria-live="polite">Emergency pull-over simulation
-        <div class="road-scene"><div class="road-car"></div></div>
+        <canvas id="pullOverCanvas" width="960" height="280" aria-label="Driver-eye and top-down views of a vehicle slowing and pulling onto the roadside"></canvas>
       </div>
       <section class="grid">
         <article class="panel">
@@ -366,6 +366,11 @@
               id="cameraMessage"
               style="align-self: center; color: var(--muted); font-size: 12px"
             ></span>
+          </div>
+          <div class="ignition-demo">
+            <span class="metric-label">Ignition simulation</span>
+            <button id="ignitionToggle" type="button">Ignition: ON</button>
+            <span class="metric-note" id="occupantTimer">Occupant check inactive</span>
           </div>
         </article>
 
@@ -429,22 +434,32 @@
           setText("eyes", status.eyes_on_road);
           setText("apiStatus", "Online");
           setText("lastUpdate", new Date().toLocaleTimeString());
-          setText(
-            "alarmTag",
-            `Alarm: ${status.alarm_escalation === "pull_over" ? "ESCALATED" : status.alarm_active ? "ACTIVE" : "inactive"}`,
-          );
+          const occupantAlert = Boolean(status.occupant_left_behind);
+          setText("alarmTag", occupantAlert
+            ? "Occupant alarm: ACTIVE"
+            : `Alarm: ${status.alarm_escalation === "pull_over" ? "ESCALATED" : status.alarm_active ? "ACTIVE" : "inactive"}`);
+          const ignitionButton = document.getElementById("ignitionToggle");
+          ignitionButton.textContent = `Ignition: ${status.ignition_on ? "ON" : "OFF"}`;
+          ignitionButton.classList.toggle("ignition-off", !status.ignition_on);
+          setText("occupantTimer", status.ignition_on
+            ? "Occupant check inactive"
+            : occupantAlert
+              ? "Occupant detected after ignition off · alarm active"
+              : `Checking for occupant · ${status.occupant_countdown_seconds ?? 0}s remaining`);
           setText("queuedCount", status.pending_notifications ?? 0);
           const alert = document.getElementById("safetyAlert");
-          if (status.alarm_active) {
-            alert.textContent = status.alarm_escalation === "pull_over"
+          if (occupantAlert || status.alarm_active) {
+            alert.textContent = occupantAlert
+              ? "OCCUPANT LEFT BEHIND: Presence detected 8 seconds after ignition OFF. Check the vehicle immediately."
+              : status.alarm_escalation === "pull_over"
               ? "SAFETY ESCALATION: Pull-over simulation triggered after sustained driver warning."
               : `DRIVER SAFETY WARNING: ${status.drowsiness === "Drowsy" ? "Drowsiness detected" : "Distraction detected"}. Please focus on the road.`;
             alert.classList.add("active");
-            document.getElementById("pullOverSimulation").classList.toggle("active", status.alarm_escalation === "pull_over");
+            setPullOverSimulation(!occupantAlert && status.alarm_escalation === "pull_over");
             startAlarmTone();
           } else {
             alert.classList.remove("active");
-            document.getElementById("pullOverSimulation").classList.remove("active");
+            setPullOverSimulation(false);
             stopAlarmTone();
           }
           if (status.released_notifications?.length) {
@@ -467,6 +482,8 @@
       let alarmOscillator = null;
       let alarmGain = null;
       let alarmToneTimer = null;
+      let pullOverFrame = null;
+      let pullOverStartedAt = null;
       function startAlarmTone() {
         if (!audioContext || alarmOscillator) return;
         alarmOscillator = audioContext.createOscillator();
@@ -492,6 +509,69 @@
         alarmOscillator.disconnect();
         alarmGain.disconnect();
         alarmOscillator = alarmGain = null;
+      }
+
+      function setPullOverSimulation(active) {
+        const panel = document.getElementById("pullOverSimulation");
+        panel.classList.toggle("active", active);
+        if (!active) {
+          if (pullOverFrame) cancelAnimationFrame(pullOverFrame);
+          pullOverFrame = null;
+          pullOverStartedAt = null;
+          return;
+        }
+        if (pullOverFrame) return;
+        pullOverStartedAt = performance.now();
+        const canvas = document.getElementById("pullOverCanvas");
+        const context = canvas.getContext("2d");
+        const draw = (now) => {
+          const progress = Math.min((now - pullOverStartedAt) / 8000, 1);
+          const eased = progress * progress * (3 - 2 * progress);
+          const w = canvas.width, h = canvas.height, half = w / 2;
+          context.clearRect(0, 0, w, h);
+          context.fillStyle = "#101923";
+          context.fillRect(0, 0, w, h);
+          context.fillStyle = "#9bb1c8";
+          context.font = "600 14px Segoe UI, sans-serif";
+          context.fillText("DRIVER VIEW", 16, 22);
+          context.fillText("TOP-DOWN VIEW", half + 16, 22);
+          context.strokeStyle = "#35465d";
+          context.beginPath(); context.moveTo(half, 0); context.lineTo(half, h); context.stroke();
+
+          // Driver view: road perspective, shoulder, lane markers, and hood.
+          const horizon = 62;
+          context.fillStyle = "#172532"; context.fillRect(0, 30, half, h - 30);
+          context.fillStyle = "#243a2e"; context.fillRect(0, 205, half, h - 205);
+          context.fillStyle = "#3d4852";
+          context.beginPath(); context.moveTo(half * .42, horizon); context.lineTo(half * .62, horizon); context.lineTo(half * .96, h); context.lineTo(half * .08, h); context.closePath(); context.fill();
+          context.strokeStyle = "#d7d9c7"; context.lineWidth = 3;
+          context.beginPath(); context.moveTo(half * .42, horizon); context.lineTo(half * .25, h); context.moveTo(half * .62, horizon); context.lineTo(half * .82, h); context.stroke();
+          context.setLineDash([18, 16]); context.lineDashOffset = -(now / (34 + 30 * eased)) % 34;
+          context.beginPath(); context.moveTo(half * .52, horizon); context.lineTo(half * .53, h); context.stroke(); context.setLineDash([]);
+          context.fillStyle = "#202a33";
+          context.beginPath(); context.moveTo(half * .32, h); context.lineTo(half * .39, h - 28); context.lineTo(half * .63, h - 28); context.lineTo(half * .72, h); context.closePath(); context.fill();
+          context.fillStyle = "#48d9ed";
+          context.beginPath(); context.ellipse(half * (.53 + .17 * eased), h - 10, 28, 8, 0, 0, Math.PI * 2); context.fill();
+
+          // Top-down view: car leaves the travel lane and settles on the shoulder.
+          const x0 = half + 70, x1 = w - 100, roadTop = 83, roadBottom = 194;
+          context.fillStyle = "#243a2e"; context.fillRect(half, 30, half, h - 30);
+          context.fillStyle = "#3d4852"; context.fillRect(half, roadTop, half, 89);
+          context.fillStyle = "#59636a"; context.fillRect(half, 172, half, 22);
+          context.strokeStyle = "#d7d9c7"; context.lineWidth = 2; context.setLineDash([16, 12]);
+          context.beginPath(); context.moveTo(half, 139); context.lineTo(w, 139); context.stroke(); context.setLineDash([]);
+          context.strokeStyle = "#f3c76a"; context.beginPath(); context.moveTo(half, roadBottom); context.lineTo(w, roadBottom); context.stroke();
+          const carX = x0 + (x1 - x0) * eased;
+          const carY = 126 + 57 * eased;
+          context.save(); context.translate(carX, carY); context.fillStyle = "#48d9ed";
+          context.beginPath(); context.roundRect(-22, -11, 44, 22, 6); context.fill();
+          context.fillStyle = "#183044"; context.fillRect(-9, -8, 18, 16); context.restore();
+          context.fillStyle = "#edf4ff"; context.font = "12px Segoe UI, sans-serif";
+          context.fillText(progress < 1 ? "Slowing down · moving to shoulder" : "Stopped on shoulder", half + 16, 246);
+          if (progress < 1) pullOverFrame = requestAnimationFrame(draw);
+          else pullOverFrame = null;
+        };
+        pullOverFrame = requestAnimationFrame(draw);
       }
 
       const cameraVideo = document.getElementById("cameraVideo");
@@ -615,6 +695,22 @@
           refreshDashboard();
         } catch (error) {
           setText("notificationMessage", `Could not send demo notification: ${error.message}`);
+        }
+      });
+
+      document.getElementById("ignitionToggle").addEventListener("click", async () => {
+        const button = document.getElementById("ignitionToggle");
+        const turnOn = button.textContent.includes("OFF");
+        try {
+          const response = await fetch(`${API_URL}/api/ignition`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ignition_on: turnOn }),
+          });
+          if (!response.ok) throw new Error("Ignition update failed");
+          await refreshDashboard();
+        } catch (error) {
+          setText("occupantTimer", `Ignition simulation unavailable: ${error.message}`);
         }
       });
     </script>

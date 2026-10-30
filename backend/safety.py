@@ -5,12 +5,16 @@ from time import monotonic
 class SafetyEngine:
     """Temporal filtering and safety decisions for successive perception frames."""
 
+    DROWSINESS_CONFIRM_SECONDS = 5.0
+    PULL_OVER_AFTER_WARNING_SECONDS = 10.0
+
     def __init__(self):
         self.reset()
 
     def reset(self):
         self.closed_since = None
         self.yawn_since = None
+        self.drowsy_candidate_since = None
         self.lookaway_since = None
         self.alarm_since = None
         self.yawns = deque()
@@ -27,10 +31,12 @@ class SafetyEngine:
         # accumulate that interval as if the driver's eyes/head stayed fixed.
         if self.last_frame_at is not None and now - self.last_frame_at > 1.5:
             self.closed_since = self.yawn_since = self.lookaway_since = None
+            self.drowsy_candidate_since = None
         self.last_frame_at = now
 
         if not result["face_detected"]:
             self.closed_since = self.yawn_since = self.lookaway_since = None
+            self.drowsy_candidate_since = None
             self.drowsy = self.distracted = False
             self.alarm_since = None
             return self._state(False, None, None, None)
@@ -39,15 +45,14 @@ class SafetyEngine:
         pose = result["head_pose"]
         yaw, pitch = pose["yaw_degrees"], pose["pitch_degrees"]
 
+        eye_closure_candidate = False
         if ear is not None:
             if ear < 0.21:
                 self.closed_since = self.closed_since or now
                 if now - self.closed_since >= 1.2:
-                    self.drowsy = True
+                    eye_closure_candidate = True
             else:
                 self.closed_since = None
-                if ear > 0.24 and (mar is None or mar < 0.55):
-                    self.drowsy = False
 
         if mar is not None and mar > 0.68:
             self.yawn_since = self.yawn_since or now
@@ -59,8 +64,16 @@ class SafetyEngine:
             self.yawn_active = False
         while self.yawns and now - self.yawns[0] > 60:
             self.yawns.popleft()
-        if len(self.yawns) >= 3:
-            self.drowsy = True
+        repeated_yawns = len(self.yawns) >= 3
+        drowsiness_candidate = eye_closure_candidate or repeated_yawns
+        if drowsiness_candidate:
+            self.drowsy_candidate_since = self.drowsy_candidate_since or now
+            if now - self.drowsy_candidate_since >= self.DROWSINESS_CONFIRM_SECONDS:
+                self.drowsy = True
+        else:
+            self.drowsy_candidate_since = None
+            if ear is not None and ear > 0.24 and (mar is None or mar < 0.55):
+                self.drowsy = False
 
         eyes_on_road = None
         if yaw is not None and pitch is not None:
@@ -107,6 +120,6 @@ class SafetyEngine:
             "mar": mar,
             "head_pose": {"yaw_degrees": yaw, "pitch_degrees": pitch},
             "alarm_active": alarm,
-            "alarm_escalation": "pull_over" if elapsed >= 10 else ("warning" if alarm else "none"),
+            "alarm_escalation": "pull_over" if elapsed >= self.PULL_OVER_AFTER_WARNING_SECONDS else ("warning" if alarm else "none"),
             "camera_connected": present,
         }

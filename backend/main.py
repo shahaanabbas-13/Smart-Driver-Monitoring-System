@@ -14,6 +14,7 @@ from backend.safety import SafetyEngine
 
 
 from datetime import datetime, timezone
+from time import monotonic
 
 app = FastAPI(
     title="Smart Cockpit API",
@@ -48,6 +49,7 @@ def health():
 @app.get("/api/status")
 def cockpit_status():
     global released_notifications
+    update_occupant_state()
     snapshot = dict(latest_perception)
     snapshot["released_notifications"] = list(released_notifications)
     released_notifications = []
@@ -60,6 +62,28 @@ latest_perception = safety_engine._state(False, None, None, None)
 latest_perception.update({"eyes_on_road": "Unknown", "pending_notifications": 0})
 queued_notifications = []
 released_notifications = []
+ignition_on = True
+ignition_off_since = None
+occupant_left_behind = False
+OCCUPANT_CONFIRM_SECONDS = 8.0
+
+
+def update_occupant_state():
+    global latest_perception, occupant_left_behind
+    elapsed = monotonic() - ignition_off_since if ignition_off_since is not None else None
+    if (
+        not ignition_on
+        and elapsed is not None
+        and elapsed >= OCCUPANT_CONFIRM_SECONDS
+        and latest_perception.get("face_detected", False)
+    ):
+        occupant_left_behind = True
+    remaining = max(0, OCCUPANT_CONFIRM_SECONDS - elapsed) if elapsed is not None else None
+    latest_perception.update({
+        "ignition_on": ignition_on,
+        "occupant_left_behind": occupant_left_behind,
+        "occupant_countdown_seconds": round(remaining, 1) if remaining is not None else None,
+    })
 
 
 @app.post("/api/camera/stop")
@@ -71,6 +95,28 @@ def camera_stopped():
     latest_perception = safety_engine._state(False, None, None, None)
     latest_perception.update({"presence": "Waiting", "eyes_on_road": "Unknown", "pending_notifications": 0, "released_notifications": []})
     return {"status": "camera stopped"}
+
+
+class IgnitionRequest(BaseModel):
+    ignition_on: bool
+
+
+@app.post("/api/ignition")
+def set_ignition(request: IgnitionRequest):
+    global ignition_on, ignition_off_since, occupant_left_behind
+    ignition_on = request.ignition_on
+    if ignition_on:
+        ignition_off_since = None
+        occupant_left_behind = False
+    elif ignition_off_since is None:
+        ignition_off_since = monotonic()
+        occupant_left_behind = False
+    update_occupant_state()
+    return {
+        "ignition_on": ignition_on,
+        "occupant_left_behind": occupant_left_behind,
+        "occupant_countdown_seconds": latest_perception["occupant_countdown_seconds"],
+    }
 
 
 class NotificationRequest(BaseModel):
@@ -130,6 +176,7 @@ def analyze_camera_frame(frame: CameraFrame):
         raise HTTPException(status_code=500, detail="Face analysis failed")
 
     latest_perception = safety_engine.update(result)
+    update_occupant_state()
     latest_perception["pending_notifications"] = len(queued_notifications)
     if latest_perception["eyes_on_road"] == "Yes" and queued_notifications:
         released_notifications.extend(queued_notifications)
