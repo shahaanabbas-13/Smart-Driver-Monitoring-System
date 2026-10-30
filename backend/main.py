@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from backend.perception import FacePerception
 from backend.safety import SafetyEngine
+from backend.profiles import DriverProfiles
 
 
 from datetime import datetime, timezone
@@ -62,6 +63,7 @@ latest_perception = safety_engine._state(False, None, None, None)
 latest_perception.update({"eyes_on_road": "Unknown", "pending_notifications": 0})
 queued_notifications = []
 released_notifications = []
+driver_profiles = None
 ignition_on = True
 ignition_off_since = None
 occupant_left_behind = False
@@ -119,6 +121,31 @@ def set_ignition(request: IgnitionRequest):
     }
 
 
+def get_driver_profiles():
+    global driver_profiles
+    if driver_profiles is None:
+        driver_profiles = DriverProfiles()
+    return driver_profiles
+
+
+class DriverProfileRequest(BaseModel):
+    name: str
+
+
+@app.get("/api/profiles")
+def list_driver_profiles():
+    return {"profiles": get_driver_profiles().list_profiles()}
+
+
+@app.post("/api/profiles")
+def create_driver_profile(profile: DriverProfileRequest):
+    try:
+        created = get_driver_profiles().create_profile(profile.name)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    return created
+
+
 class NotificationRequest(BaseModel):
     title: str
     message: str = ""
@@ -145,6 +172,7 @@ face_perception = None
 
 class CameraFrame(BaseModel):
     image: str
+    enrollment_id: int | None = None
 
 
 @app.post("/api/perception")
@@ -177,6 +205,41 @@ def analyze_camera_frame(frame: CameraFrame):
 
     latest_perception = safety_engine.update(result)
     update_occupant_state()
+    driver_name = "Unknown driver"
+    driver_id = None
+    driver_recognized = False
+    enrollment = None
+    if result["face_detected"]:
+        points = result["landmarks"]
+        image_height, image_width = bgr_image.shape[:2]
+        x_values = [point["x"] for point in points]
+        y_values = [point["y"] for point in points]
+        pad_x = max(8, int((max(x_values) - min(x_values)) * image_width * 0.12))
+        pad_y = max(8, int((max(y_values) - min(y_values)) * image_height * 0.12))
+        x1 = max(0, int(min(x_values) * image_width) - pad_x)
+        x2 = min(image_width, int(max(x_values) * image_width) + pad_x)
+        y1 = max(0, int(min(y_values) * image_height) - pad_y)
+        y2 = min(image_height, int(max(y_values) * image_height) + pad_y)
+        face_crop = bgr_image[y1:y2, x1:x2]
+        if face_crop.size:
+            profiles = get_driver_profiles()
+            if frame.enrollment_id is not None:
+                try:
+                    enrollment = profiles.add_sample(frame.enrollment_id, face_crop)
+                except ValueError as error:
+                    raise HTTPException(status_code=400, detail=str(error))
+                driver_name = "Profile enrollment"
+            else:
+                match = profiles.recognize(face_crop)
+                if match:
+                    driver_name = match["name"]
+                    driver_id = match["id"]
+                    driver_recognized = True
+    latest_perception.update({
+        "driver_name": driver_name,
+        "driver_id": driver_id,
+        "driver_recognized": driver_recognized,
+    })
     latest_perception["pending_notifications"] = len(queued_notifications)
     if latest_perception["eyes_on_road"] == "Yes" and queued_notifications:
         released_notifications.extend(queued_notifications)
@@ -189,4 +252,8 @@ def analyze_camera_frame(frame: CameraFrame):
         "ear": result["ear"],
         "mar": result["mar"],
         "head_pose": result["head_pose"],
+        "driver_name": latest_perception["driver_name"],
+        "driver_id": latest_perception["driver_id"],
+        "driver_recognized": latest_perception["driver_recognized"],
+        "enrollment": enrollment,
     }

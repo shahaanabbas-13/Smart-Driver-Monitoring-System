@@ -379,9 +379,16 @@
           <div class="center">
             <div class="avatar">👤</div>
             <div class="driver-name" id="driverName">Awaiting recognition</div>
-            <div class="muted">Face recognition not configured</div>
+            <div class="muted" id="profileRecognitionNote">LBPH recognition ready for enrollment</div>
             <div class="tag" id="alarmTag">Alarm: inactive</div>
           </div>
+          <div class="section-title">Driver profiles · up to 2</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input id="profileName" aria-label="Driver profile name" placeholder="Driver name" style="min-width:120px;flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);background:#0a0f18;color:var(--text)">
+            <button id="enrollProfile" type="button">Enroll · 40 samples</button>
+          </div>
+          <div class="metric-note" id="profileMessage" aria-live="polite">Start the camera, enter a name, then enroll.</div>
+          <div id="profileList" class="metric-note"></div>
           <div class="section-title">Backend connection</div>
           <div class="section-title">Live perception measurements</div>
           <div class="measurement-row"><span class="muted">Eye aspect ratio</span><span id="earValue">—</span></div>
@@ -429,6 +436,7 @@
           const status = await response.json();
 
           setText("presence", status.presence);
+          setText("driverName", status.driver_name || (status.face_detected ? "Unknown driver" : "Awaiting recognition"));
           setText("drowsiness", status.drowsiness);
           setText("distraction", status.distraction);
           setText("eyes", status.eyes_on_road);
@@ -581,6 +589,7 @@
       let cameraStream = null;
       let analysisRunning = false;
       let analysisInFlight = false;
+      let activeEnrollmentId = null;
       const frameCanvas = document.getElementById("frameCanvas");
       const frameContext = frameCanvas.getContext("2d", { willReadFrequently: true });
 
@@ -592,14 +601,30 @@
             frameCanvas.width = 640;
             frameCanvas.height = Math.round(640 * cameraVideo.videoHeight / cameraVideo.videoWidth);
             frameContext.drawImage(cameraVideo, 0, 0, frameCanvas.width, frameCanvas.height);
+            const framePayload = { image: frameCanvas.toDataURL("image/jpeg", 0.72) };
+            if (activeEnrollmentId !== null) framePayload.enrollment_id = activeEnrollmentId;
             const response = await fetch(`${API_URL}/api/perception`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ image: frameCanvas.toDataURL("image/jpeg", 0.72) }),
+              body: JSON.stringify(framePayload),
             });
             if (!response.ok) throw new Error("Perception request failed");
             const result = await response.json();
             setText("presence", result.face_detected ? "Detected" : "Not detected");
+            setText("driverName", result.driver_name || (result.face_detected ? "Unknown driver" : "Awaiting recognition"));
+            if (activeEnrollmentId !== null) {
+              if (result.enrollment) {
+                setText("profileMessage", `Capturing face samples: ${result.enrollment.sample_count}/${result.enrollment.target}`);
+                if (result.enrollment.complete) {
+                  activeEnrollmentId = null;
+                  setText("profileMessage", "Profile trained. Recognition is active.");
+                  document.getElementById("enrollProfile").disabled = false;
+                  loadProfiles();
+                }
+              } else {
+                setText("profileMessage", "Keep your face centered in the camera while samples are captured.");
+              }
+            }
             setText("earValue", result.ear ?? "—");
             setText("marValue", result.mar ?? "—");
             const pose = result.head_pose || {};
@@ -697,6 +722,49 @@
           setText("notificationMessage", `Could not send demo notification: ${error.message}`);
         }
       });
+
+      async function loadProfiles() {
+        try {
+          const response = await fetch(`${API_URL}/api/profiles`);
+          if (!response.ok) throw new Error("Could not load profiles");
+          const data = await response.json();
+          const profiles = data.profiles || [];
+          setText("profileList", profiles.length
+            ? profiles.map(profile => `${profile.name} · ${profile.sample_count}/40 samples${profile.trained ? " · trained" : " · in progress"}`).join(" | ")
+            : "No driver profiles saved yet.");
+        } catch {
+          setText("profileList", "Profile service unavailable.");
+        }
+      }
+
+      document.getElementById("enrollProfile").addEventListener("click", async () => {
+        if (!cameraStream) {
+          setText("profileMessage", "Start the camera before enrolling a driver.");
+          return;
+        }
+        const name = document.getElementById("profileName").value.trim();
+        if (!name) {
+          setText("profileMessage", "Enter a driver name first.");
+          return;
+        }
+        try {
+          const response = await fetch(`${API_URL}/api/profiles`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name }),
+          });
+          const profile = await response.json();
+          if (!response.ok) throw new Error(profile.detail || "Could not create profile");
+          activeEnrollmentId = profile.id;
+          document.getElementById("enrollProfile").disabled = true;
+          setText("profileMessage", `Capturing face samples: ${profile.sample_count}/40. Keep your face centered.`);
+          loadProfiles();
+        } catch (error) {
+          setText("profileMessage", error.message);
+        }
+      });
+
+      loadProfiles();
 
       document.getElementById("ignitionToggle").addEventListener("click", async () => {
         const button = document.getElementById("ignitionToggle");
