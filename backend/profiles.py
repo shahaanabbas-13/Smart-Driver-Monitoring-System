@@ -1,5 +1,6 @@
-"""Local SQLite storage and OpenCV LBPH recognition for two driver profiles."""
+"""Local SQLite storage and OpenCV LBPH recognition for family driver profiles."""
 
+import base64
 import sqlite3
 from pathlib import Path
 
@@ -10,7 +11,7 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATABASE_PATH = PROJECT_ROOT / "data" / "driver_profiles.sqlite3"
 SAMPLES_REQUIRED = 40
-MAX_PROFILES = 2
+MAX_PROFILES = 8
 LBPH_CONFIDENCE_LIMIT = 75.0
 
 
@@ -30,13 +31,19 @@ class DriverProfiles:
         with self._connect() as db:
             db.execute(
                 "CREATE TABLE IF NOT EXISTS drivers ("
-                "id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+                "id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, age INTEGER, driving_license TEXT NOT NULL DEFAULT '', "
+                "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
             )
             db.execute(
                 "CREATE TABLE IF NOT EXISTS face_samples ("
                 "id INTEGER PRIMARY KEY, driver_id INTEGER NOT NULL REFERENCES drivers(id), "
                 "image BLOB NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
             )
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(drivers)")}
+            if "age" not in columns:
+                db.execute("ALTER TABLE drivers ADD COLUMN age INTEGER")
+            if "driving_license" not in columns:
+                db.execute("ALTER TABLE drivers ADD COLUMN driving_license TEXT NOT NULL DEFAULT ''")
 
     def list_profiles(self):
         with self._connect() as db:
@@ -55,10 +62,13 @@ class DriverProfiles:
             for row in rows
         ]
 
-    def create_profile(self, name):
+    def create_profile(self, name, age, driving_license):
         clean_name = name.strip()
         if not clean_name:
             raise ValueError("Enter a driver name")
+        if age < 0 or age > 120:
+            raise ValueError("Enter an age between 0 and 120")
+        clean_license = driving_license.strip()
         with self._connect() as db:
             existing = db.execute("SELECT id FROM drivers WHERE name = ?", (clean_name,)).fetchone()
             if existing is not None:
@@ -66,6 +76,10 @@ class DriverProfiles:
                     "SELECT COUNT(*) FROM face_samples WHERE driver_id = ?", (existing["id"],)
                 ).fetchone()[0]
                 if sample_count < SAMPLES_REQUIRED:
+                    db.execute(
+                        "UPDATE drivers SET age = ?, driving_license = ? WHERE id = ?",
+                        (age, clean_license, existing["id"]),
+                    )
                     return {
                         "id": existing["id"],
                         "name": clean_name,
@@ -75,9 +89,50 @@ class DriverProfiles:
                 raise ValueError("That driver profile is already trained")
             count = db.execute("SELECT COUNT(*) FROM drivers").fetchone()[0]
             if count >= MAX_PROFILES:
-                raise ValueError("This build supports up to two driver profiles")
-            cursor = db.execute("INSERT INTO drivers(name) VALUES (?)", (clean_name,))
+                raise ValueError(f"This build supports up to {MAX_PROFILES} family profiles")
+            cursor = db.execute(
+                "INSERT INTO drivers(name, age, driving_license) VALUES (?, ?, ?)",
+                (clean_name, age, clean_license),
+            )
             return {"id": cursor.lastrowid, "name": clean_name, "sample_count": 0, "trained": False}
+
+    def get_profile(self, profile_id):
+        with self._connect() as db:
+            row = db.execute(
+                "SELECT d.id, d.name, d.age, d.driving_license, COUNT(s.id) AS sample_count "
+                "FROM drivers d LEFT JOIN face_samples s ON s.driver_id = d.id "
+                "WHERE d.id = ? GROUP BY d.id",
+                (profile_id,),
+            ).fetchone()
+            sample = db.execute(
+                "SELECT image FROM face_samples WHERE driver_id = ? ORDER BY id LIMIT 1",
+                (profile_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        photo = None
+        if sample:
+            photo_bytes = bytes(sample["image"])
+            photo = "data:image/png;base64," + base64.b64encode(photo_bytes).decode("ascii")
+        return {
+            "id": row["id"],
+            "name": row["name"],
+            "age": row["age"],
+            "driving_license": row["driving_license"],
+            "sample_count": row["sample_count"],
+            "trained": row["sample_count"] >= SAMPLES_REQUIRED,
+            "photo": photo,
+        }
+
+    def remove_profile(self, profile_id):
+        with self._connect() as db:
+            row = db.execute("SELECT id FROM drivers WHERE id = ?", (profile_id,)).fetchone()
+            if row is None:
+                return False
+            db.execute("DELETE FROM face_samples WHERE driver_id = ?", (profile_id,))
+            db.execute("DELETE FROM drivers WHERE id = ?", (profile_id,))
+        self._train_model()
+        return True
 
     @staticmethod
     def prepare_face(image):

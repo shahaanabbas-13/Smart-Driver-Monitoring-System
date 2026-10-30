@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from backend.perception import FacePerception
 from backend.safety import SafetyEngine
 from backend.profiles import DriverProfiles
+from backend.profiles import MAX_PROFILES
 
 
 from datetime import datetime, timezone
@@ -64,6 +65,7 @@ latest_perception.update({"eyes_on_road": "Unknown", "pending_notifications": 0}
 queued_notifications = []
 released_notifications = []
 driver_profiles = None
+profile_enrollment_id = None
 ignition_on = True
 ignition_off_since = None
 occupant_left_behind = False
@@ -74,7 +76,8 @@ def update_occupant_state():
     global latest_perception, occupant_left_behind
     elapsed = monotonic() - ignition_off_since if ignition_off_since is not None else None
     if (
-        not ignition_on
+        profile_enrollment_id is None
+        and not ignition_on
         and elapsed is not None
         and elapsed >= OCCUPANT_CONFIRM_SECONDS
         and latest_perception.get("face_detected", False)
@@ -83,15 +86,17 @@ def update_occupant_state():
     remaining = max(0, OCCUPANT_CONFIRM_SECONDS - elapsed) if elapsed is not None else None
     latest_perception.update({
         "ignition_on": ignition_on,
-        "occupant_left_behind": occupant_left_behind,
+        "occupant_left_behind": occupant_left_behind if profile_enrollment_id is None else False,
         "occupant_countdown_seconds": round(remaining, 1) if remaining is not None else None,
+        "profile_enrollment_active": profile_enrollment_id is not None,
     })
 
 
 @app.post("/api/camera/stop")
 def camera_stopped():
-    global latest_perception, queued_notifications, released_notifications
+    global latest_perception, queued_notifications, released_notifications, profile_enrollment_id
     safety_engine.reset()
+    profile_enrollment_id = None
     queued_notifications = []
     released_notifications = []
     latest_perception = safety_engine._state(False, None, None, None)
@@ -130,20 +135,44 @@ def get_driver_profiles():
 
 class DriverProfileRequest(BaseModel):
     name: str
+    age: int
+    driving_license: str = ""
 
 
 @app.get("/api/profiles")
 def list_driver_profiles():
-    return {"profiles": get_driver_profiles().list_profiles()}
+    return {"profiles": get_driver_profiles().list_profiles(), "maximum": MAX_PROFILES}
 
 
 @app.post("/api/profiles")
 def create_driver_profile(profile: DriverProfileRequest):
     try:
-        created = get_driver_profiles().create_profile(profile.name)
+        created = get_driver_profiles().create_profile(
+            profile.name, profile.age, profile.driving_license
+        )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error))
     return created
+
+
+@app.get("/api/profiles/{profile_id}")
+def get_driver_profile(profile_id: int):
+    profile = get_driver_profiles().get_profile(profile_id)
+    if profile is None:
+        raise HTTPException(status_code=404, detail="Driver profile not found")
+    return profile
+
+
+@app.delete("/api/profiles/{profile_id}")
+def delete_driver_profile(profile_id: int):
+    global profile_enrollment_id
+    profiles = get_driver_profiles()
+    if not profiles.remove_profile(profile_id):
+        raise HTTPException(status_code=404, detail="Driver profile not found")
+    if profile_enrollment_id == profile_id:
+        profile_enrollment_id = None
+        safety_engine.reset()
+    return {"status": "removed", "profile_id": profile_id}
 
 
 class NotificationRequest(BaseModel):
@@ -158,7 +187,7 @@ def submit_notification(notification: NotificationRequest):
     item = {"title": notification.title, "message": notification.message}
     critical = notification.priority.lower() == "critical"
     eyes_clear = latest_perception.get("eyes_on_road") == "Yes"
-    if critical or eyes_clear:
+    if profile_enrollment_id is None and (critical or eyes_clear):
         released_notifications.append(item)
         return {"status": "shown", "notification": item}
     queued_notifications.append(item)
@@ -177,7 +206,7 @@ class CameraFrame(BaseModel):
 
 @app.post("/api/perception")
 def analyze_camera_frame(frame: CameraFrame):
-    global face_perception, latest_perception, queued_notifications, released_notifications
+    global face_perception, latest_perception, queued_notifications, released_notifications, profile_enrollment_id
 
     # Browser sends a data URL such as data:image/jpeg;base64,...
     encoded = frame.image.split(",", 1)[-1]
@@ -203,7 +232,26 @@ def analyze_camera_frame(frame: CameraFrame):
     except Exception:
         raise HTTPException(status_code=500, detail="Face analysis failed")
 
-    latest_perception = safety_engine.update(result)
+    if frame.enrollment_id is not None:
+        if profile_enrollment_id != frame.enrollment_id:
+            safety_engine.reset()
+            queued_notifications.extend(released_notifications)
+            released_notifications = []
+        profile_enrollment_id = frame.enrollment_id
+        latest_perception = safety_engine._state(
+            result["face_detected"], None, result["ear"], result["mar"]
+        )
+        latest_perception.update({
+            "eyes_on_road": "Registration",
+            "alarm_active": False,
+            "alarm_escalation": "none",
+            "profile_enrollment_active": True,
+        })
+    else:
+        if profile_enrollment_id is not None:
+            safety_engine.reset()
+        profile_enrollment_id = None
+        latest_perception = safety_engine.update(result)
     update_occupant_state()
     driver_name = "Unknown driver"
     driver_id = None
@@ -229,6 +277,9 @@ def analyze_camera_frame(frame: CameraFrame):
                 except ValueError as error:
                     raise HTTPException(status_code=400, detail=str(error))
                 driver_name = "Profile enrollment"
+                if enrollment["complete"]:
+                    profile_enrollment_id = None
+                    safety_engine.reset()
             else:
                 match = profiles.recognize(face_crop)
                 if match:
