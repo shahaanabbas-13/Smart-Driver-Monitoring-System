@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Cockpit | Driver Safety</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0a0f18;
+        --panel: #121b29;
+        --border: #263449;
+        --text: #edf4ff;
+        --muted: #8ea1ba;
+        --cyan: #48d9ed;
+        --green: #5ce0a0;
+        --amber: #ffc66d;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          15px/1.5 "Segoe UI",
+          sans-serif;
+      }
+
+      .shell {
+        max-width: 1200px;
+        margin: auto;
+        padding: 28px;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 28px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .logo {
+        width: 44px;
+        height: 44px;
+        border-radius: 13px;
+        display: grid;
+        place-items: center;
+        background: #153543;
+        color: var(--cyan);
+        font-size: 24px;
+      }
+
+      h1 {
+        font-size: 22px;
+        margin: 0;
+        letter-spacing: 0.5px;
+      }
+      .subtitle,
+      .muted {
+        color: var(--muted);
+      }
+      .subtitle {
+        margin: 3px 0 0;
+        font-size: 13px;
+      }
+
+      .connection {
+        border: 1px solid var(--border);
+        border-radius: 30px;
+        padding: 8px 12px;
+        color: var(--amber);
+        font-size: 13px;
+      }
+
+      .dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: currentColor;
+        margin-right: 7px;
+      }
+
+      .section-title {
+        font-size: 12px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        margin: 24px 0 12px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 19px;
+        min-width: 0;
+      }
+
+      .metric-label {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .metric-value {
+        font-size: 21px;
+        font-weight: 650;
+        margin-top: 13px;
+      }
+      .metric-note {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 5px;
+      }
+
+      .status-mark {
+        color: var(--cyan);
+        margin-right: 7px;
+      }
+
+      .main-grid {
+        display: grid;
+        grid-template-columns: 1.5fr 1fr;
+        gap: 14px;
+        margin-top: 14px;
+      }
+
+      .camera {
+        min-height: 290px;
+        background: #080d15;
+        border: 1px dashed #35465d;
+        border-radius: 12px;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        padding: 24px;
+      }
+
+      .camera-icon {
+        font-size: 38px;
+        margin-bottom: 8px;
+      }
+      .camera h3 {
+        margin: 0 0 5px;
+      }
+      .camera p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .measurement-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+      }
+      .measurement-row:last-child { border-bottom: 0; }
+
+      .avatar {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        margin: 10px auto 18px;
+        background: #203247;
+        font-size: 43px;
+        border: 2px solid #38516c;
+      }
+
+      .center {
+        text-align: center;
+      }
+      .driver-name {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .tag {
+        display: inline-block;
+        margin-top: 10px;
+        padding: 5px 10px;
+        border-radius: 20px;
+        background: #292b26;
+        color: var(--amber);
+        font-size: 12px;
+      }
+
+      .safety-alert {
+        display: none;
+        margin: 14px 0;
+        padding: 14px 18px;
+        border: 1px solid #ff5964;
+        border-radius: 12px;
+        color: #fff;
+        background: #541e2a;
+        font-weight: 650;
+      }
+      .safety-alert.active { display: block; animation: alert-pulse 1s infinite alternate; }
+      @keyframes alert-pulse { to { background: #8a2632; } }
+      .pull-over-sim { display:none; margin-top:10px; padding:10px; border-radius:8px; background:#101923; font-size:12px; }
+      .pull-over-sim.active { display:block; }
+      .road-scene { height:42px; position:relative; overflow:hidden; margin-top:6px; background:linear-gradient(to bottom, #43505b 0 68%, #243a2e 68%); border-radius:5px; }
+      .road-scene::before { content:""; position:absolute; left:0; right:0; top:32%; border-top:2px dashed #d7d9c7; }
+      .road-car { position:absolute; left:18%; top:10px; width:34px; height:16px; border-radius:5px; background:#48d9ed; box-shadow:0 0 9px #48d9ed88; animation:pull-over 5s ease-in-out infinite alternate; }
+      @keyframes pull-over { 0%,15% { transform:translate(0,0); } 80%,100% { transform:translate(130px,12px); } }
+
+      .api-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .api-row:last-child {
+        border-bottom: 0;
+      }
+      .api-value {
+        text-align: right;
+        overflow-wrap: anywhere;
+      }
+
+      footer {
+        text-align: center;
+        color: var(--muted);
+        font-size: 12px;
+        padding: 25px 0 5px;
+      }
+
+      @media (max-width: 850px) {
+        .grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .main-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 500px) {
+        .shell {
+          padding: 16px;
+        }
+        header {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+        h1 {
+          font-size: 19px;
+        }
+        .metric-value {
+          font-size: 18px;
+        }
+      }
+      button {
+        padding: 10px 14px;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        background: #183044;
+        color: var(--text);
+        cursor: pointer;
+      }
+
+      button:hover {
+        border-color: var(--cyan);
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header>
+        <div class="brand">
+          <div class="logo">⌁</div>
+          <div>
+            <h1>SMART COCKPIT</h1>
+            <p class="subtitle">Intelligent Driver Monitoring System</p>
+          </div>
+        </div>
+        <div class="connection" id="connection">
+          <span class="dot"></span>Connecting to backend…
+        </div>
+      </header>
+
+      <div class="section-title">Driver safety overview</div>
+      <div class="safety-alert" id="safetyAlert" role="alert" aria-live="assertive"></div>
+      <div class="pull-over-sim" id="pullOverSimulation" aria-live="polite">Emergency pull-over simulation
+        <div class="road-scene"><div class="road-car"></div></div>
+      </div>
+      <section class="grid">
+        <article class="panel">
+          <div class="metric-label">Driver presence</div>
+          <div class="metric-value" id="presence">Waiting</div>
+          <div class="metric-note">Presence detection</div>
+        </article>
+        <article class="panel">
+          <div class="metric-label">Drowsiness</div>
+          <div class="metric-value" id="drowsiness">Inactive</div>
+          <div class="metric-note">Eye and yawn monitoring</div>
+        </article>
+        <article class="panel">
+          <div class="metric-label">Distraction</div>
+          <div class="metric-value" id="distraction">Inactive</div>
+          <div class="metric-note">Head pose monitoring</div>
+        </article>
+        <article class="panel">
+          <div class="metric-label">Eyes on road</div>
+          <div class="metric-value" id="eyes">Unknown</div>
+          <div class="metric-note">Attention estimate</div>
+        </article>
+      </section>
+
+      <section class="main-grid">
+        <article class="panel">
+          <div class="section-title" style="margin-top: 0">
+            Live driver camera
+          </div>
+
+          <div class="camera">
+            <video
+              id="cameraVideo"
+              autoplay
+              muted
+              playsinline
+              style="
+                display: none;
+                width: 100%;
+                max-height: 360px;
+                object-fit: contain;
+                border-radius: 12px;
+              "
+            ></video>
+            <canvas id="frameCanvas" hidden></canvas>
+
+            <div id="cameraPlaceholder">
+              <div class="camera-icon">◉</div>
+              <h3>Camera not started</h3>
+              <p>Allow camera access to preview the video.</p>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 10px; margin-top: 12px">
+            <button id="startCamera" type="button">Start camera</button>
+            <button id="stopCamera" type="button">Stop camera</button>
+            <span
+              id="cameraMessage"
+              style="align-self: center; color: var(--muted); font-size: 12px"
+            ></span>
+          </div>
+        </article>
+
+        <article class="panel">
+          <div class="section-title" style="margin-top: 0">Driver profile</div>
+          <div class="center">
+            <div class="avatar">👤</div>
+            <div class="driver-name" id="driverName">Awaiting recognition</div>
+            <div class="muted">Face recognition not configured</div>
+            <div class="tag" id="alarmTag">Alarm: inactive</div>
+          </div>
+          <div class="section-title">Backend connection</div>
+          <div class="section-title">Live perception measurements</div>
+          <div class="measurement-row"><span class="muted">Eye aspect ratio</span><span id="earValue">—</span></div>
+          <div class="measurement-row"><span class="muted">Mouth aspect ratio</span><span id="marValue">—</span></div>
+          <div class="measurement-row"><span class="muted">Head yaw / pitch</span><span id="poseValue">—</span></div>
+          <div class="api-row">
+            <span class="muted">API status</span>
+            <span class="api-value" id="apiStatus">Checking…</span>
+          </div>
+          <div class="api-row"><span class="muted">Queued notifications</span><span class="api-value" id="queuedCount">0</span></div>
+          <div class="section-title">Notification demo</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input id="notificationText" aria-label="Notification text" value="New message" style="min-width:130px;flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);background:#0a0f18;color:var(--text)">
+            <select id="notificationPriority" aria-label="Notification priority" style="padding:9px;border-radius:8px;border:1px solid var(--border);background:#0a0f18;color:var(--text)"><option value="non-critical">Non-critical</option><option value="critical">Critical</option></select>
+            <button id="sendNotification" type="button">Send demo</button>
+          </div>
+          <div class="metric-note" id="notificationMessage" aria-live="polite"></div>
+          <div class="api-row">
+            <span class="muted">Last update</span>
+            <span class="api-value" id="lastUpdate">—</span>
+          </div>
+        </article>
+      </section>
+
+      <footer>
+        SMART COCKPIT · Development build 0.2 · Safety decisions are
+        experimental and require in-vehicle validation
+      </footer>
+    </div>
+
+    <script>
+      const API_URL = "http://127.0.0.1:8000";
+
+      function setText(id, value) {
+        document.getElementById(id).textContent = value;
+      }
+
+      async function refreshDashboard() {
+        const connection = document.getElementById("connection");
+
+        try {
+          const response = await fetch(`${API_URL}/api/status`);
+          if (!response.ok) throw new Error("API request failed");
+
+          const status = await response.json();
+
+          setText("presence", status.presence);
+          setText("drowsiness", status.drowsiness);
+          setText("distraction", status.distraction);
+          setText("eyes", status.eyes_on_road);
+          setText("apiStatus", "Online");
+          setText("lastUpdate", new Date().toLocaleTimeString());
+          setText(
+            "alarmTag",
+            `Alarm: ${status.alarm_escalation === "pull_over" ? "ESCALATED" : status.alarm_active ? "ACTIVE" : "inactive"}`,
+          );
+          setText("queuedCount", status.pending_notifications ?? 0);
+          const alert = document.getElementById("safetyAlert");
+          if (status.alarm_active) {
+            alert.textContent = status.alarm_escalation === "pull_over"
+              ? "SAFETY ESCALATION: Pull-over simulation triggered after sustained driver warning."
+              : `DRIVER SAFETY WARNING: ${status.drowsiness === "Drowsy" ? "Drowsiness detected" : "Distraction detected"}. Please focus on the road.`;
+            alert.classList.add("active");
+            document.getElementById("pullOverSimulation").classList.toggle("active", status.alarm_escalation === "pull_over");
+            startAlarmTone();
+          } else {
+            alert.classList.remove("active");
+            document.getElementById("pullOverSimulation").classList.remove("active");
+            stopAlarmTone();
+          }
+          if (status.released_notifications?.length) {
+            setText("notificationMessage", `Released ${status.released_notifications.length} queued notification(s): ${status.released_notifications.map(item => item.title).join(", ")}`);
+          }
+
+          connection.style.color = "var(--green)";
+          connection.innerHTML = '<span class="dot"></span>Backend connected';
+        } catch (error) {
+          setText("apiStatus", "Offline");
+          connection.style.color = "var(--amber)";
+          connection.innerHTML = '<span class="dot"></span>Backend unavailable';
+        }
+      }
+
+      refreshDashboard();
+      setInterval(refreshDashboard, 2000);
+
+      let audioContext = null;
+      let alarmOscillator = null;
+      let alarmGain = null;
+      let alarmToneTimer = null;
+      function startAlarmTone() {
+        if (!audioContext || alarmOscillator) return;
+        alarmOscillator = audioContext.createOscillator();
+        alarmGain = audioContext.createGain();
+        alarmOscillator.type = "square";
+        alarmOscillator.frequency.value = 880;
+        alarmGain.gain.value = 0.035;
+        alarmOscillator.connect(alarmGain).connect(audioContext.destination);
+        alarmOscillator.start();
+        let highTone = false;
+        alarmToneTimer = window.setInterval(() => {
+          if (!alarmOscillator || !audioContext) return;
+          highTone = !highTone;
+          alarmOscillator.frequency.setTargetAtTime(highTone ? 1050 : 680, audioContext.currentTime, 0.04);
+          alarmGain.gain.setTargetAtTime(highTone ? 0.045 : 0.018, audioContext.currentTime, 0.04);
+        }, 420);
+      }
+      function stopAlarmTone() {
+        if (!alarmOscillator) return;
+        window.clearInterval(alarmToneTimer);
+        alarmToneTimer = null;
+        alarmOscillator.stop();
+        alarmOscillator.disconnect();
+        alarmGain.disconnect();
+        alarmOscillator = alarmGain = null;
+      }
+
+      const cameraVideo = document.getElementById("cameraVideo");
+      const cameraPlaceholder = document.getElementById("cameraPlaceholder");
+      const cameraMessage = document.getElementById("cameraMessage");
+
+      let cameraStream = null;
+      let analysisRunning = false;
+      let analysisInFlight = false;
+      const frameCanvas = document.getElementById("frameCanvas");
+      const frameContext = frameCanvas.getContext("2d", { willReadFrequently: true });
+
+      async function analyzeFrame() {
+        if (!analysisRunning || analysisInFlight) return;
+        if (cameraVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          analysisInFlight = true;
+          try {
+            frameCanvas.width = 640;
+            frameCanvas.height = Math.round(640 * cameraVideo.videoHeight / cameraVideo.videoWidth);
+            frameContext.drawImage(cameraVideo, 0, 0, frameCanvas.width, frameCanvas.height);
+            const response = await fetch(`${API_URL}/api/perception`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ image: frameCanvas.toDataURL("image/jpeg", 0.72) }),
+            });
+            if (!response.ok) throw new Error("Perception request failed");
+            const result = await response.json();
+            setText("presence", result.face_detected ? "Detected" : "Not detected");
+            setText("earValue", result.ear ?? "—");
+            setText("marValue", result.mar ?? "—");
+            const pose = result.head_pose || {};
+            setText("poseValue", pose.yaw_degrees == null ? "—" : `${pose.yaw_degrees}° / ${pose.pitch_degrees}°`);
+            cameraMessage.textContent = result.face_detected ? "Live face analysis active" : "No face detected";
+          } catch (error) {
+            cameraMessage.textContent = `Analysis unavailable: ${error.message}`;
+          } finally {
+            analysisInFlight = false;
+          }
+        }
+        if (analysisRunning) window.setTimeout(analyzeFrame, 350);
+      }
+
+      document
+        .getElementById("startCamera")
+        .addEventListener("click", async () => {
+          if (cameraStream) return;
+
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            audioContext ||= new AudioContextClass();
+            if (audioContext.state === "suspended") await audioContext.resume();
+          }
+
+          if (!navigator.mediaDevices?.getUserMedia) {
+            cameraMessage.textContent =
+              "Camera API unavailable. Use localhost.";
+            return;
+          }
+
+          try {
+            cameraMessage.textContent = "Requesting camera permission…";
+
+            cameraStream = await navigator.mediaDevices.getUserMedia({
+              video: {
+                facingMode: "user",
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+              },
+              audio: false,
+            });
+
+            cameraVideo.srcObject = cameraStream;
+            cameraVideo.style.display = "block";
+            cameraPlaceholder.style.display = "none";
+            await cameraVideo.play();
+
+            analysisRunning = true;
+            cameraMessage.textContent = "Camera active; starting analysis…";
+            analyzeFrame();
+            document.getElementById("startCamera").disabled = true;
+          } catch (error) {
+            cameraStream = null;
+            cameraMessage.textContent =
+              error.name === "NotAllowedError"
+                ? "Camera permission denied. Allow access in your browser."
+                : `Camera error: ${error.message}`;
+          }
+        });
+
+      document.getElementById("stopCamera").addEventListener("click", () => {
+        analysisRunning = false;
+        if (cameraStream) {
+          cameraStream.getTracks().forEach((track) => track.stop());
+          cameraStream = null;
+        }
+
+        cameraVideo.srcObject = null;
+        cameraVideo.style.display = "none";
+        cameraPlaceholder.style.display = "block";
+        cameraMessage.textContent = "Camera stopped";
+        setText("earValue", "—");
+        setText("marValue", "—");
+        setText("poseValue", "—");
+        fetch(`${API_URL}/api/camera/stop`, { method: "POST" }).catch(() => {});
+        stopAlarmTone();
+        document.getElementById("startCamera").disabled = false;
+      });
+
+      document.getElementById("sendNotification").addEventListener("click", async () => {
+        const message = document.getElementById("notificationText").value.trim();
+        if (!message) return;
+        try {
+          const response = await fetch(`${API_URL}/api/notifications`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title: message, message, priority: document.getElementById("notificationPriority").value }),
+          });
+          if (!response.ok) throw new Error("Notification request failed");
+          const result = await response.json();
+          setText("notificationMessage", result.status === "queued" ? `Queued while attention is away (${result.pending} pending).` : `Shown immediately: ${message}`);
+          refreshDashboard();
+        } catch (error) {
+          setText("notificationMessage", `Could not send demo notification: ${error.message}`);
+        }
+      });
+    </script>
+  </body>
+</html>
