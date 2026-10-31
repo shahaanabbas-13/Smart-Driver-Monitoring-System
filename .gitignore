@@ -23,6 +23,7 @@ htmlcov/
 node_modules/
 dist/
 build/
+coverage/
 
 # Local databases, logs, and editor/OS files
 *.db
@@ -34,4 +35,10 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Keep the MediaPipe model used by the application tracked.
+# Locally enrolled biometric data and model exports
+data/driver_profiles.sqlite3
+data/driver_profiles.sqlite3-*
+data/enrollment/
+data/lbph.yml
+data/labels.json
+data/*.tmp

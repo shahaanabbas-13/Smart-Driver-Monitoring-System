@@ -144,6 +144,7 @@
 
       .camera {
         min-height: 290px;
+        position: relative;
         background: var(--camera-bg);
         border: 1px dashed #b7c5d4;
         border-radius: 12px;
@@ -337,7 +338,7 @@
         <article class="panel">
           <div class="metric-label">Drowsiness</div>
           <div class="metric-value" id="drowsiness">Inactive</div>
-          <div class="metric-note">Eye and yawn monitoring</div>
+          <div class="metric-note">Eye and yawn monitoring · heuristic emotion: <span id="emotionStatus">Calm</span></div>
         </article>
         <article class="panel">
           <div class="metric-label">Distraction</div>
@@ -347,7 +348,9 @@
         <article class="panel">
           <div class="metric-label">Eyes on road</div>
           <div class="metric-value" id="eyes">Unknown</div>
-          <div class="metric-note">Attention estimate</div>
+          <div class="metric-note">Eye-gaze and face-direction estimate</div>
+          <button id="calibrateAttention" type="button" style="margin-top:10px;padding:7px 10px;font-size:12px">Calibrate forward pose</button>
+          <div class="metric-note" id="calibrationMessage" aria-live="polite">Look straight ahead during calibration.</div>
         </article>
       </section>
 
@@ -372,6 +375,7 @@
               "
             ></video>
             <canvas id="frameCanvas" hidden></canvas>
+            <canvas id="arOverlay" aria-hidden="true" style="position:absolute;display:none;pointer-events:none;z-index:2"></canvas>
 
             <div id="cameraPlaceholder">
               <div class="camera-icon">◉</div>
@@ -403,15 +407,21 @@
             <div class="muted" id="profileRecognitionNote">Recognizes registered driver profiles</div>
             <div class="tag" id="alarmTag">Alarm: inactive</div>
           </div>
+          <div class="measurement-row"><span class="muted">Personalized demo temperature</span><span id="profileTemperatureDisplay">—</span></div>
+          <div class="measurement-row"><span class="muted">Preferred demo playlist</span><span id="profilePlaylistDisplay">Focus Flow</span></div>
           <div class="section-title">Backend connection</div>
           <div class="section-title">Live perception measurements</div>
           <div class="measurement-row"><span class="muted">Eye aspect ratio</span><span id="earValue">—</span></div>
           <div class="measurement-row"><span class="muted">Mouth aspect ratio</span><span id="marValue">—</span></div>
+          <div class="measurement-row"><span class="muted">Yawning</span><span id="yawnStatus">—</span></div>
+          <div class="measurement-row"><span class="muted">Yawns in last minute</span><span id="yawnCount">0</span></div>
+          <div class="measurement-row"><span class="muted">Alarm confirmation</span><span id="alarmFrames">0 / 4 frames</span></div>
           <div class="measurement-row"><span class="muted">Head yaw / pitch</span><span id="poseValue">—</span></div>
           <div class="api-row">
             <span class="muted">API status</span>
             <span class="api-value" id="apiStatus">Checking…</span>
           </div>
+          <div class="api-row"><span class="muted">Camera feed</span><span class="api-value" id="cameraFeedStatus">Waiting</span></div>
           <div class="api-row"><span class="muted">Queued notifications</span><span class="api-value" id="queuedCount">0</span></div>
           <div class="section-title">Notification demo</div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -420,6 +430,21 @@
             <button id="sendNotification" type="button">Send demo</button>
           </div>
           <div class="metric-note" id="notificationMessage" aria-live="polite"></div>
+          <div class="section-title">Voice commands</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button id="voiceToggle" type="button">Start voice control</button>
+            <span class="metric-note" id="voiceStatus" aria-live="polite">Voice control is off.</span>
+          </div>
+          <div class="metric-note">Say “Dismiss Alarm”, “Next Track”, or “Phone Call”. Commands require Eyes on road = Yes.</div>
+          <div class="measurement-row"><span class="muted">Now playing</span><span id="nowPlaying">Demo track 1</span></div>
+          <div class="metric-note" id="voiceActionMessage" aria-live="polite"></div>
+          <div class="section-title">Gesture control</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <button id="gestureToggle" type="button">Start gesture control</button>
+            <span class="metric-note" id="gestureStatus" aria-live="polite">Gesture control is off.</span>
+          </div>
+          <div class="metric-note">Open Palm → Next Track · Thumbs Up → Dismiss Alarm · Fist → Phone Call. Actions require Eyes on road = Yes.</div>
+          <div class="metric-note" id="gestureActionMessage" aria-live="polite"></div>
           <div class="api-row">
             <span class="muted">Last update</span>
             <span class="api-value" id="lastUpdate">—</span>
@@ -458,6 +483,18 @@
               <input id="profileLicense" aria-label="Driving licence" placeholder="Driving licence" style="min-width:150px;flex:1;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)">
               <button id="enrollProfile" type="button">Enroll · 40 samples</button>
             </div>
+            <div class="metric-note" style="margin-top:12px">Personalize this member's light dashboard accent and demo controls:</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px">
+              <select id="profileTheme" aria-label="Dashboard accent theme" style="padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)">
+                <option value="ocean">Ocean blue</option><option value="sage">Soft green</option><option value="amber">Warm amber</option>
+              </select>
+              <label class="metric-note" style="display:flex;align-items:center;gap:6px">Demo temperature
+                <input id="profileTemperature" type="number" min="16" max="30" value="22" aria-label="Demo cabin temperature in Celsius" style="width:76px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)"> °C
+              </label>
+              <select id="profilePlaylist" aria-label="Demo playlist" style="padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)">
+                <option>Focus Flow</option><option>Ambient Calm</option><option>Upbeat Energy</option><option>Late Night Drive</option>
+              </select>
+            </div>
             <div class="metric-note" id="profileMessage" aria-live="polite">Start the camera, enter the details, then select Enroll.</div>
             <div class="section-title">Registered family members · select a name</div>
             <div class="profile-list" id="profileList"></div>
@@ -469,6 +506,7 @@
               <div class="metric-note" id="detailAge"></div>
               <div class="metric-note" id="detailLicense"></div>
               <div class="metric-note" id="detailEnrollment"></div>
+              <div class="metric-note" id="detailPersonalization"></div>
               <button id="removeProfile" type="button" style="margin-top:12px;background:#fff0f0;border-color:#d34450;color:#9d1c28">Remove profile</button>
             </section>
           </article>
@@ -477,10 +515,47 @@
     </div>
 
     <script>
-      const API_URL = "http://127.0.0.1:8000";
+      const localFrontend = ["localhost", "127.0.0.1"].includes(window.location.hostname)
+        && ["5500", "5173"].includes(window.location.port);
+      const API_URL = window.SMART_COCKPIT_API_URL || (localFrontend ? "http://127.0.0.1:8000" : "");
+      let latestEyesOnRoad = "Unknown";
+      let currentAlarmActive = false;
+      let alarmSilenced = false;
+      const themeAccents = { ocean: "#087e9b", sage: "#2f855a", amber: "#a66700" };
+      const playlists = {
+        "Focus Flow": ["Midnight Focus", "Deep Work", "Flow State"],
+        "Ambient Calm": ["Gentle Rain", "Ocean Drift", "Soft Light"],
+        "Upbeat Energy": ["Neon Rush", "Electric Feel", "Turbo Boost"],
+        "Late Night Drive": ["Midnight City", "Street Lights", "After Hours"],
+      };
+      const emotionPlaylists = { stressed: "Ambient Calm", tired: "Upbeat Energy" };
+      let activePlaylist = "Focus Flow";
+      let trackIndex = 0;
 
       function setText(id, value) {
         document.getElementById(id).textContent = value;
+      }
+
+      function renderNowPlaying() {
+        const tracks = playlists[activePlaylist] || playlists["Focus Flow"];
+        setText("nowPlaying", tracks[trackIndex % tracks.length]);
+      }
+
+      function applyDriverSettings(settings, emotion = "calm") {
+        const theme = themeAccents[settings?.theme] ? settings.theme : "ocean";
+        document.documentElement.style.setProperty("--cyan", themeAccents[theme]);
+        setText("profileTemperatureDisplay", settings ? `${settings.temperature} °C · demo` : "—");
+        setText("profilePlaylistDisplay", settings?.playlist || "Focus Flow");
+        const emotionPlaylist = emotionPlaylists[emotion];
+        const nextPlaylist = emotionPlaylist || (playlists[settings?.playlist] ? settings.playlist : "Focus Flow");
+        if (activePlaylist !== nextPlaylist) {
+          activePlaylist = nextPlaylist;
+          trackIndex = 0;
+          renderNowPlaying();
+        }
+        const emotionTint = { calm: "#f2f7fa", stressed: "#fff1e8", tired: "#edf0fa" }[emotion] || "#f2f7fa";
+        document.documentElement.style.setProperty("--camera-bg", emotionTint);
+        setText("emotionStatus", emotion[0].toUpperCase() + emotion.slice(1));
       }
 
       async function refreshDashboard() {
@@ -492,12 +567,23 @@
 
           const status = await response.json();
 
+          applyDriverSettings(status.driver_settings, status.emotion || "calm");
           setText("presence", status.presence);
           setText("driverName", status.driver_name || (status.face_detected ? "Unknown driver" : "Awaiting recognition"));
           setText("drowsiness", status.drowsiness);
           setText("distraction", status.distraction);
           setText("eyes", status.eyes_on_road);
+          setText("yawnStatus", status.yawning ? "Detected" : "No");
+          setText("yawnCount", status.yawn_count_60s ?? 0);
+          setText("alarmFrames", `${Math.min(status.alarm_confirmation_frames ?? 0, 4)} / 4 frames`);
+          latestEyesOnRoad = status.eyes_on_road;
+          if (status.eyes_on_road === "Calibrating") {
+            setText("calibrationMessage", `Look straight ahead and hold steady · ${status.attention_calibration_remaining ?? 0} samples remaining`);
+          } else if (status.eyes_on_road === "Yes" || status.eyes_on_road === "No") {
+            setText("calibrationMessage", "Forward pose calibrated · recalibrate if this estimate seems wrong.");
+          }
           setText("apiStatus", "Online");
+          setText("cameraFeedStatus", status.camera_connected ? "Live" : status.presence === "Waiting" ? "Waiting" : "Unavailable");
           setText("lastUpdate", new Date().toLocaleTimeString());
           const occupantAlert = Boolean(status.occupant_left_behind);
           setText("alarmTag", occupantAlert
@@ -513,7 +599,8 @@
               : `Checking for occupant · ${status.occupant_countdown_seconds ?? 0}s remaining`);
           setText("queuedCount", status.pending_notifications ?? 0);
           const alert = document.getElementById("safetyAlert");
-          if (occupantAlert || status.alarm_active) {
+          currentAlarmActive = occupantAlert || status.alarm_active;
+          if (currentAlarmActive) {
             alert.textContent = occupantAlert
               ? "OCCUPANT LEFT BEHIND: Presence detected 8 seconds after ignition OFF. Check the vehicle immediately."
               : status.alarm_escalation === "pull_over"
@@ -521,10 +608,11 @@
               : `DRIVER SAFETY WARNING: ${status.drowsiness === "Drowsy" ? "Drowsiness detected" : "Distraction detected"}. Please focus on the road.`;
             alert.classList.add("active");
             setPullOverSimulation(!occupantAlert && status.alarm_escalation === "pull_over");
-            startAlarmTone();
+            if (!alarmSilenced) startAlarmTone();
           } else {
             alert.classList.remove("active");
             setPullOverSimulation(false);
+            alarmSilenced = false;
             stopAlarmTone();
           }
           if (status.released_notifications?.length) {
@@ -535,13 +623,14 @@
           connection.innerHTML = '<span class="dot"></span>Backend connected';
         } catch (error) {
           setText("apiStatus", "Offline");
+          setText("cameraFeedStatus", "Unavailable");
           connection.style.color = "var(--amber)";
           connection.innerHTML = '<span class="dot"></span>Backend unavailable';
         }
       }
 
       refreshDashboard();
-      setInterval(refreshDashboard, 2000);
+      setInterval(refreshDashboard, 750);
 
       let audioContext = null;
       let alarmOscillator = null;
@@ -644,14 +733,59 @@
       const cameraPlaceholder = document.getElementById("cameraPlaceholder");
       const profileCameraPlaceholder = document.getElementById("profileCameraPlaceholder");
       const cameraMessage = document.getElementById("cameraMessage");
+      const arOverlay = document.getElementById("arOverlay");
+      const arContext = arOverlay.getContext("2d");
 
       let cameraStream = null;
       let analysisRunning = false;
       let analysisInFlight = false;
+      let analysisTimer = null;
       let activeEnrollmentId = null;
       let selectedProfileId = null;
+      let gestureEnabled = false;
       const frameCanvas = document.getElementById("frameCanvas");
       const frameContext = frameCanvas.getContext("2d", { willReadFrequently: true });
+
+      function drawFaceOverlay(landmarks) {
+        const videoRect = cameraVideo.getBoundingClientRect();
+        const cameraRect = cameraVideo.parentElement.getBoundingClientRect();
+        if (!landmarks?.length || !videoRect.width || !videoRect.height) {
+          arOverlay.style.display = "none";
+          arContext.clearRect(0, 0, arOverlay.width, arOverlay.height);
+          return;
+        }
+        const scale = window.devicePixelRatio || 1;
+        arOverlay.width = Math.round(videoRect.width * scale);
+        arOverlay.height = Math.round(videoRect.height * scale);
+        arOverlay.style.left = `${videoRect.left - cameraRect.left}px`;
+        arOverlay.style.top = `${videoRect.top - cameraRect.top}px`;
+        arOverlay.style.width = `${videoRect.width}px`;
+        arOverlay.style.height = `${videoRect.height}px`;
+        arOverlay.style.display = "block";
+        arContext.setTransform(scale, 0, 0, scale, 0, 0);
+        arContext.clearRect(0, 0, videoRect.width, videoRect.height);
+        const points = landmarks.map(({ x, y }) => ({ x: x * videoRect.width, y: y * videoRect.height }));
+        const xs = points.map(point => point.x);
+        const ys = points.map(point => point.y);
+        const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+        const corner = Math.max(10, Math.min(x1 - x0, y1 - y0) * 0.12);
+        arContext.strokeStyle = "#087e9b";
+        arContext.lineWidth = 2;
+        for (const [x, y, dx, dy] of [[x0,y0,1,1],[x1,y0,-1,1],[x0,y1,1,-1],[x1,y1,-1,-1]]) {
+          arContext.beginPath();
+          arContext.moveTo(x + dx * corner, y);
+          arContext.lineTo(x, y);
+          arContext.lineTo(x, y + dy * corner);
+          arContext.stroke();
+        }
+        arContext.fillStyle = "rgba(8,126,155,.72)";
+        for (const index of [1, 33, 133, 159, 145, 263, 362, 386, 374, 13, 14, 61, 291]) {
+          if (!points[index]) continue;
+          arContext.beginPath();
+          arContext.arc(points[index].x, points[index].y, 2.2, 0, Math.PI * 2);
+          arContext.fill();
+        }
+      }
 
       async function analyzeFrame() {
         if (!analysisRunning || analysisInFlight) return;
@@ -663,6 +797,7 @@
             frameContext.drawImage(cameraVideo, 0, 0, frameCanvas.width, frameCanvas.height);
             const framePayload = { image: frameCanvas.toDataURL("image/jpeg", 0.72) };
             if (activeEnrollmentId !== null) framePayload.enrollment_id = activeEnrollmentId;
+            framePayload.gesture_enabled = gestureEnabled;
             const response = await fetch(`${API_URL}/api/perception`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -670,6 +805,7 @@
             });
             if (!response.ok) throw new Error("Perception request failed");
             const result = await response.json();
+            drawFaceOverlay(result.landmarks);
             setText("presence", result.face_detected ? "Detected" : "Not detected");
             setText("driverName", result.driver_name || (result.face_detected ? "Unknown driver" : "Awaiting recognition"));
             if (activeEnrollmentId !== null) {
@@ -679,6 +815,7 @@
                   activeEnrollmentId = null;
                   setText("profileMessage", "Profile trained. Recognition is active.");
                   document.getElementById("enrollProfile").disabled = false;
+                  gestureToggle.disabled = false;
                   loadProfiles();
                   if (selectedProfileId !== null) loadProfileDetails(selectedProfileId);
                 }
@@ -688,8 +825,20 @@
             }
             setText("earValue", result.ear ?? "—");
             setText("marValue", result.mar ?? "—");
+            setText("yawnStatus", result.yawning ? "Detected" : "No");
+            setText("yawnCount", result.yawn_count_60s ?? 0);
             const pose = result.head_pose || {};
             setText("poseValue", pose.yaw_degrees == null ? "—" : `${pose.yaw_degrees}° / ${pose.pitch_degrees}°`);
+            if (gestureEnabled) {
+              setText("gestureStatus", result.gesture ? `Detected: ${result.gesture}` : "Show one hand clearly to the camera.");
+              if (result.gesture_triggered) {
+                if (result.gesture_action && result.gesture_authorized) {
+                  executeCockpitCommand(result.gesture_action, "gestureActionMessage");
+                } else {
+                  setText("gestureActionMessage", "Gesture ignored: Eyes on road is not confirmed.");
+                }
+              }
+            }
             cameraMessage.textContent = result.face_detected ? "Live face analysis active" : "No face detected";
           } catch (error) {
             cameraMessage.textContent = `Analysis unavailable: ${error.message}`;
@@ -697,7 +846,10 @@
             analysisInFlight = false;
           }
         }
-        if (analysisRunning) window.setTimeout(analyzeFrame, 350);
+        if (analysisRunning) {
+          window.clearTimeout(analysisTimer);
+          analysisTimer = window.setTimeout(analyzeFrame, 350);
+        }
       }
 
       document
@@ -739,6 +891,8 @@
             await profileCameraVideo.play();
 
             analysisRunning = true;
+            window.clearTimeout(analysisTimer);
+            analysisTimer = null;
             cameraMessage.textContent = "Camera active; starting analysis…";
             document.getElementById("profileCameraMessage").textContent = "Camera active";
             analyzeFrame();
@@ -755,6 +909,12 @@
 
       document.getElementById("stopCamera").addEventListener("click", () => {
         analysisRunning = false;
+        window.clearTimeout(analysisTimer);
+        analysisTimer = null;
+        gestureEnabled = false;
+        gestureToggle.disabled = activeEnrollmentId !== null;
+        gestureToggle.textContent = "Start gesture control";
+        setText("gestureStatus", "Gesture control is off.");
         if (cameraStream) {
           cameraStream.getTracks().forEach((track) => track.stop());
           cameraStream = null;
@@ -762,6 +922,7 @@
 
         cameraVideo.srcObject = null;
         cameraVideo.style.display = "none";
+        arOverlay.style.display = "none";
         cameraPlaceholder.style.display = "block";
         profileCameraVideo.srcObject = null;
         profileCameraVideo.style.display = "none";
@@ -778,10 +939,11 @@
       });
 
       document.getElementById("profileStartCamera").addEventListener("click", () => {
+        if (cameraStream) return;
         document.getElementById("startCamera").click();
       });
       document.getElementById("profileStopCamera").addEventListener("click", () => {
-        document.getElementById("stopCamera").click();
+        if (cameraStream) document.getElementById("stopCamera").click();
       });
 
       document.getElementById("sendNotification").addEventListener("click", async () => {
@@ -801,6 +963,129 @@
           setText("notificationMessage", `Could not send demo notification: ${error.message}`);
         }
       });
+
+      const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+      let voiceRecognition = null;
+      let voiceEnabled = false;
+
+      function executeCockpitCommand(command, outputId) {
+        if (command === "dismiss alarm") {
+          if (currentAlarmActive) {
+            alarmSilenced = true;
+            stopAlarmTone();
+            setText(outputId, "Alarm sound silenced. The visual warning remains until the safety condition clears.");
+          } else {
+            setText(outputId, "No active alarm to dismiss.");
+          }
+        } else if (command === "next track") {
+          const tracks = playlists[activePlaylist] || playlists["Focus Flow"];
+          trackIndex = (trackIndex + 1) % tracks.length;
+          renderNowPlaying();
+          setText(outputId, "Advanced to the next demo track.");
+        } else {
+          setText(outputId, "Phone call command accepted (demo only; no call was placed).");
+        }
+      }
+
+      async function processVoiceTranscript(transcript) {
+        const spoken = transcript.toLowerCase().replace(/[.,!?]/g, " ").replace(/\s+/g, " ").trim();
+        const commands = [
+          ["dismiss alarm", /\bdismiss\s+(the\s+)?alarm\b/],
+          ["next track", /\bnext\s+(track|song)\b/],
+          ["phone call", /\b(phone\s+call|call\s+phone)\b/],
+        ];
+        const match = commands.find(([, pattern]) => pattern.test(spoken));
+        if (!match) {
+          setText("voiceActionMessage", `Command not recognized: “${transcript}”`);
+          return;
+        }
+
+        try {
+          const response = await fetch(`${API_URL}/api/voice/authorize`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ command: match[0] }),
+          });
+          const authorization = await response.json();
+          if (!response.ok) throw new Error(authorization.detail || "Voice command check failed");
+          if (!authorization.authorized) {
+            setText("voiceActionMessage", `${match[0]} ignored: Eyes on road is not confirmed.`);
+            return;
+          }
+
+          executeCockpitCommand(match[0], "voiceActionMessage");
+          setText("voiceStatus", `Heard: “${transcript}”`);
+        } catch (error) {
+          setText("voiceActionMessage", error.message);
+        }
+      }
+
+      const voiceToggle = document.getElementById("voiceToggle");
+      const gestureToggle = document.getElementById("gestureToggle");
+      gestureToggle.addEventListener("click", () => {
+        if (!cameraStream && !gestureEnabled) {
+          setText("gestureStatus", "Start the camera before enabling gesture control.");
+          return;
+        }
+        gestureEnabled = !gestureEnabled;
+        gestureToggle.textContent = gestureEnabled ? "Stop gesture control" : "Start gesture control";
+        setText("gestureStatus", gestureEnabled
+          ? "Gesture control active. Hold a gesture for about 1 second."
+          : "Gesture control is off.");
+        if (!gestureEnabled) setText("gestureActionMessage", "");
+      });
+      if (SpeechRecognitionClass) {
+        voiceRecognition = new SpeechRecognitionClass();
+        voiceRecognition.lang = "en-IN";
+        voiceRecognition.continuous = true;
+        voiceRecognition.interimResults = false;
+        voiceRecognition.onresult = (event) => {
+          for (let index = event.resultIndex; index < event.results.length; index += 1) {
+            if (event.results[index].isFinal) {
+              processVoiceTranscript(event.results[index][0].transcript);
+            }
+          }
+        };
+        voiceRecognition.onerror = (event) => {
+          setText("voiceStatus", event.error === "not-allowed"
+            ? "Microphone permission denied."
+            : `Voice recognition: ${event.error}`);
+          if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+            voiceEnabled = false;
+            voiceToggle.textContent = "Start voice control";
+          }
+        };
+        voiceRecognition.onend = () => {
+          if (voiceEnabled) {
+            window.setTimeout(() => {
+              if (!voiceEnabled) return;
+              try { voiceRecognition.start(); } catch { /* A recognition session may still be closing. */ }
+            }, 350);
+          } else {
+            setText("voiceStatus", "Voice control is off.");
+          }
+        };
+        voiceToggle.addEventListener("click", () => {
+          voiceEnabled = !voiceEnabled;
+          if (voiceEnabled) {
+            try {
+              voiceRecognition.start();
+              voiceToggle.textContent = "Stop voice control";
+              setText("voiceStatus", "Listening for the three supported commands…");
+            } catch (error) {
+              voiceEnabled = false;
+              setText("voiceStatus", `Could not start microphone: ${error.message}`);
+            }
+          } else {
+            voiceRecognition.stop();
+            voiceToggle.textContent = "Start voice control";
+            setText("voiceStatus", "Voice control is off.");
+          }
+        });
+      } else {
+        voiceToggle.disabled = true;
+        setText("voiceStatus", "Speech recognition is not supported in this browser.");
+      }
 
       async function loadProfiles() {
         try {
@@ -849,24 +1134,36 @@
         const name = document.getElementById("profileName").value.trim();
         const age = Number.parseInt(document.getElementById("profileAge").value, 10);
         const drivingLicense = document.getElementById("profileLicense").value.trim();
+        const temperature = Number.parseInt(document.getElementById("profileTemperature").value, 10);
         if (!name) {
           setText("profileMessage", "Enter a driver name first.");
           return;
         }
-        if (!Number.isInteger(age) || age < 0 || age > 120) {
-          setText("profileMessage", "Enter a valid age (0–120).");
+        if (!Number.isInteger(age) || age < 0 || age > 120 || !Number.isInteger(temperature) || temperature < 16 || temperature > 30) {
+          setText("profileMessage", "Enter a valid age (0–120) and demo temperature (16–30 °C).");
           return;
         }
         try {
           const response = await fetch(`${API_URL}/api/profiles`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ name, age, driving_license: drivingLicense }),
+            body: JSON.stringify({
+              name,
+              age,
+              driving_license: drivingLicense,
+              theme: document.getElementById("profileTheme").value,
+              temperature,
+              playlist: document.getElementById("profilePlaylist").value,
+            }),
           });
           const profile = await response.json();
           if (!response.ok) throw new Error(profile.detail || "Could not create profile");
           activeEnrollmentId = profile.id;
           selectedProfileId = profile.id;
+          gestureEnabled = false;
+          gestureToggle.disabled = true;
+          gestureToggle.textContent = "Start gesture control";
+          setText("gestureStatus", "Gesture control paused during profile registration.");
           document.getElementById("enrollProfile").disabled = true;
           setText("profileMessage", `Capturing face samples: ${profile.sample_count}/40. Keep your face centered.`);
           loadProfiles();
@@ -886,6 +1183,7 @@
           setText("detailAge", `Age: ${profile.age ?? "Not provided"}`);
           setText("detailLicense", `Driving licence: ${profile.driving_license || "Not provided"}`);
           setText("detailEnrollment", `${profile.sample_count}/40 samples · ${profile.trained ? "trained for recognition" : "registration incomplete"}`);
+          setText("detailPersonalization", `Theme: ${profile.theme} · Demo temperature: ${profile.temperature} °C · Playlist: ${profile.playlist}`);
           const photo = document.getElementById("profilePhoto");
           const fallback = document.getElementById("profilePhotoFallback");
           if (profile.photo) {
@@ -914,6 +1212,7 @@
           if (activeEnrollmentId === selectedProfileId) {
             activeEnrollmentId = null;
             document.getElementById("enrollProfile").disabled = false;
+            gestureToggle.disabled = false;
           }
           selectedProfileId = null;
           document.getElementById("profileDetails").hidden = true;
@@ -952,6 +1251,22 @@
           await refreshDashboard();
         } catch (error) {
           setText("occupantTimer", `Ignition simulation unavailable: ${error.message}`);
+        }
+      });
+
+      document.getElementById("calibrateAttention").addEventListener("click", async () => {
+        if (!cameraStream) {
+          setText("calibrationMessage", "Start the camera before calibrating attention.");
+          return;
+        }
+        try {
+          const response = await fetch(`${API_URL}/api/attention/recalibrate`, { method: "POST" });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.detail || "Could not start calibration");
+          setText("eyes", "Calibrating");
+          setText("calibrationMessage", "Sit in your normal driving position, look straight ahead, and hold steady for about 4 seconds.");
+        } catch (error) {
+          setText("calibrationMessage", error.message);
         }
       });
     </script>

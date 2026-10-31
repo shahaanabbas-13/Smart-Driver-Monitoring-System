@@ -56,6 +56,81 @@ class FacePerception:
     def _rounded(value, digits=3):
         return round(float(value), digits) if np.isfinite(value) else None
 
+    @classmethod
+    def _mouth_aspect_ratio(cls, points):
+        # Keep the central inner-lip opening as the primary score. Averaging
+        # side openings can dilute a real yawn, especially with a small face.
+        mouth_width = cls._distance(points[78], points[308])
+        if mouth_width <= 1e-6:
+            return 0.0
+        center_opening = cls._distance(points[13], points[14]) / mouth_width
+        side_opening = (
+            cls._distance(points[82], points[87])
+            + cls._distance(points[312], points[317])
+        ) / (2 * mouth_width)
+        return 0.75 * center_opening + 0.25 * side_opening
+
+    @classmethod
+    def _emotion_hint(cls, points, ear, mar):
+        """Return a conservative geometry hint, not a psychological diagnosis."""
+        eye_span = cls._distance(points[33], points[263])
+        if eye_span <= 1e-6:
+            return "calm"
+        brow_gap = (
+            cls._distance(points[105], points[159])
+            + cls._distance(points[334], points[386])
+        ) / (2 * eye_span)
+        if ear < 0.17 or mar > 0.34:
+            return "tired"
+        if brow_gap < 0.18:
+            return "stressed"
+        return "calm"
+
+    @classmethod
+    def _gaze_and_frontality(cls, points):
+        if len(points) < 478:
+            return None, None
+
+        def ratio_between(value, start, end):
+            span = end - start
+            return (value - start) / span if abs(span) > 1e-6 else None
+
+        horizontal_positions = (
+            ratio_between(points[468][0], points[33][0], points[133][0]),
+            ratio_between(points[473][0], points[263][0], points[362][0]),
+        )
+        left_top = (points[159][1] + points[158][1]) / 2
+        left_bottom = (points[145][1] + points[153][1]) / 2
+        right_top = (points[386][1] + points[385][1]) / 2
+        right_bottom = (points[374][1] + points[380][1]) / 2
+        vertical_positions = (
+            ratio_between(points[468][1], left_top, left_bottom),
+            ratio_between(points[473][1], right_top, right_bottom),
+        )
+        horizontal_positions = [v for v in horizontal_positions if v is not None]
+        vertical_positions = [v for v in vertical_positions if v is not None]
+        gaze = None
+        if horizontal_positions and vertical_positions:
+            gaze = {
+                "horizontal": cls._rounded(sum(horizontal_positions) / len(horizontal_positions)),
+                "vertical": cls._rounded(sum(vertical_positions) / len(vertical_positions)),
+            }
+
+        left_eye_width = cls._distance(points[33], points[133])
+        right_eye_width = cls._distance(points[263], points[362])
+        face_width = abs(points[234][0] - points[454][0])
+        if min(left_eye_width, right_eye_width, face_width) <= 1e-6:
+            frontal_score = None
+        else:
+            symmetry = min(left_eye_width, right_eye_width) / max(left_eye_width, right_eye_width)
+            left_eye_center = (points[33][0] + points[133][0]) / 2
+            right_eye_center = (points[263][0] + points[362][0]) / 2
+            eye_midpoint = (left_eye_center + right_eye_center) / 2
+            nose_offset = abs(points[1][0] - eye_midpoint) / face_width
+            nose_centering = max(0.0, 1.0 - nose_offset / 0.22)
+            frontal_score = cls._rounded(0.65 * symmetry + 0.35 * nose_centering)
+        return gaze, frontal_score
+
     def _head_pose(self, points, width, height):
         image_points = np.array(
             [(points[i][0] * width, points[i][1] * height) for i in self.POSE_IDS],
@@ -92,14 +167,18 @@ class FacePerception:
                 "landmarks": [],
                 "ear": None,
                 "mar": None,
+                "gaze": None,
+                "frontal_score": None,
+                "emotion": "calm",
                 "head_pose": {"yaw_degrees": None, "pitch_degrees": None},
             }
 
         points = [(point.x, point.y) for point in result.face_landmarks[0]]
         left_ear = self._ear(points, self.LEFT_EYE)
         right_ear = self._ear(points, self.RIGHT_EYE)
-        mouth = [points[i] for i in self.MOUTH]
-        mar = self._distance(mouth[1], mouth[3]) / self._distance(mouth[0], mouth[2])
+        mar = self._mouth_aspect_ratio(points)
+        gaze, frontal_score = self._gaze_and_frontality(points)
+        ear = (left_ear + right_ear) / 2
 
         return {
             "face_detected": True,
@@ -107,8 +186,11 @@ class FacePerception:
                 {"x": p.x, "y": p.y, "z": p.z}
                 for p in result.face_landmarks[0]
             ],
-            "ear": self._rounded((left_ear + right_ear) / 2),
+            "ear": self._rounded(ear),
             "mar": self._rounded(mar),
+            "emotion": self._emotion_hint(points, ear, mar),
+            "gaze": gaze,
+            "frontal_score": frontal_score,
             "head_pose": self._head_pose(points, width, height),
         }
 
