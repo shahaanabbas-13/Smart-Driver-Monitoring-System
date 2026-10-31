@@ -6,17 +6,17 @@
     <title>Smart Cockpit | Driver Safety</title>
     <style>
       :root {
-        color-scheme: light;
-        --bg: #f3f6fa;
-        --panel: #ffffff;
-        --border: #d7e0ea;
-        --text: #1e293b;
-        --muted: #65758a;
-        --cyan: #087e9b;
-        --green: #16835d;
-        --amber: #a66700;
-        --input-bg: #ffffff;
-        --camera-bg: #e9eff5;
+        color-scheme: dark;
+        --bg: #0b1118;
+        --panel: #131d29;
+        --border: #2a3b50;
+        --text: #edf4fb;
+        --muted: #a2b2c5;
+        --cyan: #42c9df;
+        --green: #4bd6a0;
+        --amber: #ffc766;
+        --input-bg: #0d1621;
+        --camera-bg: #080e16;
       }
 
       * {
@@ -57,7 +57,7 @@
         border-radius: 13px;
         display: grid;
         place-items: center;
-        background: #e0f1f4;
+          background: #153440;
         color: var(--cyan);
         font-size: 24px;
       }
@@ -184,7 +184,7 @@
         display: grid;
         place-items: center;
         margin: 10px auto 18px;
-        background: #e9f0f6;
+        background: #1d3043;
         font-size: 43px;
         border: 2px solid #c3d2df;
       }
@@ -201,7 +201,7 @@
         margin-top: 10px;
         padding: 5px 10px;
         border-radius: 20px;
-        background: #fff1d2;
+        background: #3c321d;
         color: var(--amber);
         font-size: 12px;
       }
@@ -218,7 +218,13 @@
       }
       .safety-alert.active { display: block; animation: alert-pulse 1s infinite alternate; }
       @keyframes alert-pulse { to { background: #8a2632; } }
-      .pull-over-sim { display:none; margin-top:10px; padding:10px; border-radius:8px; background:#e9eff5; font-size:12px; }
+      .command-toast { display:none; position:fixed; z-index:20; right:24px; bottom:24px; max-width:min(480px,calc(100vw - 32px)); padding:16px 20px; border:1px solid var(--cyan); border-radius:14px; color:var(--text); background:var(--panel); box-shadow:0 16px 42px rgba(0,0,0,.5); font-size:15px; font-weight:700; }
+      .command-toast.active { display:block; animation:toast-in .18s ease-out; }
+      .command-toast.emergency { border-color:#ff596b; color:#fff1f2; background:#3b1720; box-shadow:0 0 26px rgba(255,65,86,.24),0 16px 42px rgba(0,0,0,.5); }
+      .command-toast.phone { border-color:#4bd6a0; color:#e3fff2; background:#123126; box-shadow:0 0 24px rgba(75,214,160,.2),0 16px 42px rgba(0,0,0,.5); }
+      .command-toast.track { border-color:#9c91ff; color:#f0edff; background:#211c3b; box-shadow:0 0 24px rgba(156,145,255,.2),0 16px 42px rgba(0,0,0,.5); }
+      @keyframes toast-in { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+      .pull-over-sim { display:none; margin-top:10px; padding:10px; border:1px solid var(--border); border-radius:8px; background:#172434; font-size:12px; }
       .pull-over-sim.active { display:block; }
       #pullOverCanvas { display:block; width:100%; height:auto; margin-top:8px; border-radius:6px; background:var(--camera-bg); }
 
@@ -272,7 +278,7 @@
         padding: 10px 14px;
         border: 1px solid var(--border);
         border-radius: 9px;
-        background: #e8f0f6;
+        background: #1c3043;
         color: var(--text);
         cursor: pointer;
       }
@@ -287,18 +293,18 @@
       }
       .ignition-demo { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:12px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; }
       .ignition-demo .metric-note { margin:0; }
-      #ignitionToggle.ignition-off { background:#fff0f0; border-color:#d34450; }
+      #ignitionToggle.ignition-off { background:#421d27; border-color:#d34450; color:#ffdce0; }
       .tab-nav { display:flex; gap:8px; margin:20px 0 8px; border-bottom:1px solid var(--border); }
       .tab-button { border:0; border-bottom:2px solid transparent; border-radius:8px 8px 0 0; background:transparent; color:var(--muted); padding:12px 16px; }
-      .tab-button.active { color:var(--cyan); border-bottom-color:var(--cyan); background:#e8f3f6; }
+      .tab-button.active { color:var(--cyan); border-bottom-color:var(--cyan); background:#142d38; }
       .page-heading { margin:24px 0 6px; font-size:22px; }
       .page-description { margin:0 0 18px; color:var(--muted); }
       .profile-grid { display:grid; grid-template-columns:1.2fr 1fr; gap:14px; }
       .profile-camera video { display:none; width:100%; max-height:360px; object-fit:contain; border-radius:12px; }
       .profile-list { display:grid; gap:9px; margin-top:14px; max-height:280px; overflow-y:auto; padding-right:5px; }
-      .profile-card { background:#f8fafc; border:1px solid var(--border); border-radius:10px; padding:12px; }
-      .profile-choice { width:100%; text-align:left; background:#f8fafc; color:var(--text); }
-      .profile-choice.selected { border-color:var(--cyan); background:#e8f3f6; }
+      .profile-card { background:#101a26; border:1px solid var(--border); border-radius:10px; padding:12px; }
+      .profile-choice { width:100%; text-align:left; background:#101a26; color:var(--text); }
+      .profile-choice.selected { border-color:var(--cyan); background:#142d38; }
       #profilePhoto { object-position:center; border:1px solid var(--border); }
       @media (max-width:850px) { .profile-grid { grid-template-columns:1fr; } }
     </style>
@@ -326,6 +332,7 @@
       <section id="dashboardView" class="tab-view" role="tabpanel" aria-labelledby="dashboardTab">
       <div class="section-title">Driver safety overview</div>
       <div class="safety-alert" id="safetyAlert" role="alert" aria-live="assertive"></div>
+      <div class="command-toast" id="commandToast" role="status" aria-live="polite"></div>
       <div class="pull-over-sim" id="pullOverSimulation" aria-live="polite">Emergency pull-over simulation
         <canvas id="pullOverCanvas" width="960" height="280" aria-label="Driver-eye and top-down views of a vehicle slowing and pulling onto the roadside"></canvas>
       </div>
@@ -415,35 +422,27 @@
           <div class="measurement-row"><span class="muted">Mouth aspect ratio</span><span id="marValue">—</span></div>
           <div class="measurement-row"><span class="muted">Yawning</span><span id="yawnStatus">—</span></div>
           <div class="measurement-row"><span class="muted">Yawns in last minute</span><span id="yawnCount">0</span></div>
-          <div class="measurement-row"><span class="muted">Alarm confirmation</span><span id="alarmFrames">0 / 4 frames</span></div>
+          <div class="measurement-row"><span class="muted">Alarm confirmation</span><span id="alarmFrames">0 / 5 frames</span></div>
           <div class="measurement-row"><span class="muted">Head yaw / pitch</span><span id="poseValue">—</span></div>
           <div class="api-row">
             <span class="muted">API status</span>
             <span class="api-value" id="apiStatus">Checking…</span>
           </div>
           <div class="api-row"><span class="muted">Camera feed</span><span class="api-value" id="cameraFeedStatus">Waiting</span></div>
-          <div class="api-row"><span class="muted">Queued notifications</span><span class="api-value" id="queuedCount">0</span></div>
-          <div class="section-title">Notification demo</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <input id="notificationText" aria-label="Notification text" value="New message" style="min-width:130px;flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)">
-            <select id="notificationPriority" aria-label="Notification priority" style="padding:9px;border-radius:8px;border:1px solid var(--border);background:var(--input-bg);color:var(--text)"><option value="non-critical">Non-critical</option><option value="critical">Critical</option></select>
-            <button id="sendNotification" type="button">Send demo</button>
-          </div>
-          <div class="metric-note" id="notificationMessage" aria-live="polite"></div>
           <div class="section-title">Voice commands</div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <button id="voiceToggle" type="button">Start voice control</button>
             <span class="metric-note" id="voiceStatus" aria-live="polite">Voice control is off.</span>
           </div>
-          <div class="metric-note">Say “Dismiss Alarm”, “Next Track”, or “Phone Call”. Commands require Eyes on road = Yes.</div>
-          <div class="measurement-row"><span class="muted">Now playing</span><span id="nowPlaying">Demo track 1</span></div>
+          <div class="metric-note">Say “Dismiss Alarm”, “Next Track”, or “Call” followed by any person's name. Dismiss requires Eyes on road = Yes; other commands are not eye-gated.</div>
+          <div class="measurement-row"><span class="muted">Now playing</span><span id="nowPlaying">Midnight Focus</span></div>
           <div class="metric-note" id="voiceActionMessage" aria-live="polite"></div>
           <div class="section-title">Gesture control</div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <button id="gestureToggle" type="button">Start gesture control</button>
             <span class="metric-note" id="gestureStatus" aria-live="polite">Gesture control is off.</span>
           </div>
-          <div class="metric-note">Open Palm → Next Track · Thumbs Up → Dismiss Alarm · Fist → Phone Call. Actions require Eyes on road = Yes.</div>
+          <div class="metric-note">Thumbs Up → Dismiss Alarm. Dismiss requires Eyes on road = Yes. Other gestures are ignored.</div>
           <div class="metric-note" id="gestureActionMessage" aria-live="polite"></div>
           <div class="api-row">
             <span class="muted">Last update</span>
@@ -500,14 +499,14 @@
             <div class="profile-list" id="profileList"></div>
             <section id="profileDetails" class="profile-card" style="margin-top:14px" hidden>
               <div class="section-title" style="margin-top:0">Member details</div>
-              <img id="profilePhoto" alt="Selected member face sample" style="width:128px;height:128px;object-fit:cover;border-radius:12px;background:#e9eff5;display:none">
+              <img id="profilePhoto" alt="Selected member face sample" style="width:128px;height:128px;object-fit:cover;border-radius:12px;background:#080e16;display:none">
               <div id="profilePhotoFallback" class="muted">No face sample captured yet.</div>
               <h3 id="detailName" style="margin-bottom:4px"></h3>
               <div class="metric-note" id="detailAge"></div>
               <div class="metric-note" id="detailLicense"></div>
               <div class="metric-note" id="detailEnrollment"></div>
               <div class="metric-note" id="detailPersonalization"></div>
-              <button id="removeProfile" type="button" style="margin-top:12px;background:#fff0f0;border-color:#d34450;color:#9d1c28">Remove profile</button>
+              <button id="removeProfile" type="button" style="margin-top:12px;background:#421d27;border-color:#d34450;color:#ffdce0">Remove profile</button>
             </section>
           </article>
         </div>
@@ -520,13 +519,17 @@
       const API_URL = window.SMART_COCKPIT_API_URL || (localFrontend ? "http://127.0.0.1:8000" : "");
       let latestEyesOnRoad = "Unknown";
       let currentAlarmActive = false;
+      let currentOccupantAlarmActive = false;
       let alarmSilenced = false;
+      let pullOverAnnounced = false;
+      let occupantAnnounced = false;
+      let toastTimer = null;
       const themeAccents = { ocean: "#087e9b", sage: "#2f855a", amber: "#a66700" };
       const playlists = {
-        "Focus Flow": ["Midnight Focus", "Deep Work", "Flow State"],
-        "Ambient Calm": ["Gentle Rain", "Ocean Drift", "Soft Light"],
-        "Upbeat Energy": ["Neon Rush", "Electric Feel", "Turbo Boost"],
-        "Late Night Drive": ["Midnight City", "Street Lights", "After Hours"],
+        "Focus Flow": ["Midnight Focus", "Deep Work", "Flow State", "Concentration", "Brain Waves", "Quiet Momentum", "Blue Hour", "Soft Signals", "Open Road"],
+        "Ambient Calm": ["Gentle Rain", "Ocean Drift", "Soft Light", "Floating", "Stillness", "Cloud Lines", "Slow Horizon", "Quiet Shore", "Evening Air"],
+        "Upbeat Energy": ["Neon Rush", "Electric Feel", "Turbo Boost", "Solar Flare", "Adrenaline", "Fast Lane", "Bright Side", "Pulse Drive", "City Lights"],
+        "Late Night Drive": ["Midnight City", "Street Lights", "After Hours", "Cruisin'", "Moonlit Road", "Night Signals", "Last Exit", "Silver Skyline", "Distant Stars"],
       };
       const emotionPlaylists = { stressed: "Ambient Calm", tired: "Upbeat Energy" };
       let activePlaylist = "Focus Flow";
@@ -534,6 +537,23 @@
 
       function setText(id, value) {
         document.getElementById(id).textContent = value;
+      }
+
+      function showCockpitToast(message, kind) {
+        const toast = document.getElementById("commandToast");
+        toast.textContent = message;
+        toast.classList.remove("emergency", "phone", "track");
+        toast.classList.add("active", kind);
+        window.clearTimeout(toastTimer);
+        toastTimer = window.setTimeout(() => toast.classList.remove("active"), 5000);
+      }
+
+      function speakDashboardMessage(message) {
+        if (!("speechSynthesis" in window) || !("SpeechSynthesisUtterance" in window)) return;
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(message);
+        utterance.lang = "en-IN";
+        window.speechSynthesis.speak(utterance);
       }
 
       function renderNowPlaying() {
@@ -553,7 +573,7 @@
           trackIndex = 0;
           renderNowPlaying();
         }
-        const emotionTint = { calm: "#f2f7fa", stressed: "#fff1e8", tired: "#edf0fa" }[emotion] || "#f2f7fa";
+        const emotionTint = { calm: "#0c1b24", stressed: "#241b16", tired: "#171b2c" }[emotion] || "#0c1b24";
         document.documentElement.style.setProperty("--camera-bg", emotionTint);
         setText("emotionStatus", emotion[0].toUpperCase() + emotion.slice(1));
       }
@@ -575,7 +595,7 @@
           setText("eyes", status.eyes_on_road);
           setText("yawnStatus", status.yawning ? "Detected" : "No");
           setText("yawnCount", status.yawn_count_60s ?? 0);
-          setText("alarmFrames", `${Math.min(status.alarm_confirmation_frames ?? 0, 4)} / 4 frames`);
+          setText("alarmFrames", `${Math.min(status.alarm_confirmation_frames ?? 0, 5)} / 5 frames`);
           latestEyesOnRoad = status.eyes_on_road;
           if (status.eyes_on_road === "Calibrating") {
             setText("calibrationMessage", `Look straight ahead and hold steady · ${status.attention_calibration_remaining ?? 0} samples remaining`);
@@ -586,39 +606,55 @@
           setText("cameraFeedStatus", status.camera_connected ? "Live" : status.presence === "Waiting" ? "Waiting" : "Unavailable");
           setText("lastUpdate", new Date().toLocaleTimeString());
           const occupantAlert = Boolean(status.occupant_left_behind);
+          currentOccupantAlarmActive = occupantAlert;
+          const pullOverTriggered = Boolean(status.pull_over_triggered);
+          if (occupantAlert && !occupantAnnounced) {
+            const message = "Occupant left behind. Please check the vehicle immediately.";
+            showCockpitToast(message, "emergency");
+            speakDashboardMessage(message);
+            occupantAnnounced = true;
+          } else if (!occupantAlert) {
+            occupantAnnounced = false;
+          }
+          if (pullOverTriggered && !pullOverAnnounced) {
+            const message = "Emergency pull-over triggered. No traffic camera is connected; roadside clearance is assumed safe for this simulation. Beginning the pull-over now.";
+            showCockpitToast(message, "emergency");
+            speakDashboardMessage(message);
+            pullOverAnnounced = true;
+          } else if (!pullOverTriggered) {
+            pullOverAnnounced = false;
+          }
           setText("alarmTag", occupantAlert
             ? "Occupant alarm: ACTIVE"
-            : `Alarm: ${status.alarm_escalation === "pull_over" ? "ESCALATED" : status.alarm_active ? "ACTIVE" : "inactive"}`);
+            : pullOverTriggered ? "Emergency pull-over: ACTIVE"
+            : `Alarm: ${status.alarm_active ? "ACTIVE" : "inactive"}`);
           const ignitionButton = document.getElementById("ignitionToggle");
           ignitionButton.textContent = `Ignition: ${status.ignition_on ? "ON" : "OFF"}`;
           ignitionButton.classList.toggle("ignition-off", !status.ignition_on);
           setText("occupantTimer", status.ignition_on
             ? "Occupant check inactive"
             : occupantAlert
-              ? "Occupant detected after ignition off · alarm active"
-              : `Checking for occupant · ${status.occupant_countdown_seconds ?? 0}s remaining`);
-          setText("queuedCount", status.pending_notifications ?? 0);
+              ? "Occupant detected · alert stays active until they leave or ignition is ON"
+              : status.occupant_countdown_seconds == null
+                ? "Waiting for a visible occupant"
+                : `Confirming occupant · ${Math.ceil(status.occupant_countdown_seconds)}s remaining`);
           const alert = document.getElementById("safetyAlert");
-          currentAlarmActive = occupantAlert || status.alarm_active;
+          currentAlarmActive = occupantAlert || status.alarm_active || pullOverTriggered;
           if (currentAlarmActive) {
             alert.textContent = occupantAlert
-              ? "OCCUPANT LEFT BEHIND: Presence detected 8 seconds after ignition OFF. Check the vehicle immediately."
-              : status.alarm_escalation === "pull_over"
-              ? "SAFETY ESCALATION: Pull-over simulation triggered after sustained driver warning."
+              ? "OCCUPANT LEFT BEHIND: Presence remained after ignition OFF. Check the vehicle immediately."
+              : pullOverTriggered
+              ? "EMERGENCY PULL-OVER: Five yawns were confirmed within the last minute. No traffic camera is connected; roadside clearance is assumed safe for this simulation."
               : `DRIVER SAFETY WARNING: ${status.drowsiness === "Drowsy" ? "Drowsiness detected" : "Distraction detected"}. Please focus on the road.`;
             alert.classList.add("active");
-            setPullOverSimulation(!occupantAlert && status.alarm_escalation === "pull_over");
-            if (!alarmSilenced) startAlarmTone();
+            setPullOverSimulation(pullOverTriggered);
+            if (!alarmSilenced) startAlarmTone(occupantAlert ? "occupant" : "driver");
           } else {
             alert.classList.remove("active");
             setPullOverSimulation(false);
             alarmSilenced = false;
             stopAlarmTone();
           }
-          if (status.released_notifications?.length) {
-            setText("notificationMessage", `Released ${status.released_notifications.length} queued notification(s): ${status.released_notifications.map(item => item.title).join(", ")}`);
-          }
-
           connection.style.color = "var(--green)";
           connection.innerHTML = '<span class="dot"></span>Backend connected';
         } catch (error) {
@@ -636,17 +672,31 @@
       let alarmOscillator = null;
       let alarmGain = null;
       let alarmToneTimer = null;
+      let alarmToneKind = null;
       let pullOverFrame = null;
       let pullOverStartedAt = null;
-      function startAlarmTone() {
-        if (!audioContext || alarmOscillator) return;
+      let pullOverCompleted = false;
+      function startAlarmTone(kind = "driver") {
+        if (!audioContext) return;
+        if (alarmOscillator && alarmToneKind === kind) return;
+        if (alarmOscillator) stopAlarmTone();
         alarmOscillator = audioContext.createOscillator();
         alarmGain = audioContext.createGain();
-        alarmOscillator.type = "square";
-        alarmOscillator.frequency.value = 880;
-        alarmGain.gain.value = 0.035;
+        alarmToneKind = kind;
+        alarmOscillator.type = kind === "occupant" ? "triangle" : "square";
+        alarmOscillator.frequency.value = kind === "occupant" ? 560 : 880;
+        alarmGain.gain.value = kind === "occupant" ? 0.045 : 0.035;
         alarmOscillator.connect(alarmGain).connect(audioContext.destination);
         alarmOscillator.start();
+        if (kind === "occupant") {
+          let pulseOn = true;
+          alarmToneTimer = window.setInterval(() => {
+            if (!alarmOscillator || !audioContext) return;
+            pulseOn = !pulseOn;
+            alarmGain.gain.setTargetAtTime(pulseOn ? 0.05 : 0.002, audioContext.currentTime, 0.025);
+          }, 260);
+          return;
+        }
         let highTone = false;
         alarmToneTimer = window.setInterval(() => {
           if (!alarmOscillator || !audioContext) return;
@@ -663,6 +713,7 @@
         alarmOscillator.disconnect();
         alarmGain.disconnect();
         alarmOscillator = alarmGain = null;
+        alarmToneKind = null;
       }
 
       function setPullOverSimulation(active) {
@@ -672,9 +723,10 @@
           if (pullOverFrame) cancelAnimationFrame(pullOverFrame);
           pullOverFrame = null;
           pullOverStartedAt = null;
+          pullOverCompleted = false;
           return;
         }
-        if (pullOverFrame) return;
+        if (pullOverFrame || pullOverCompleted) return;
         pullOverStartedAt = performance.now();
         const canvas = document.getElementById("pullOverCanvas");
         const context = canvas.getContext("2d");
@@ -723,7 +775,10 @@
           context.fillStyle = "#324254"; context.font = "12px Segoe UI, sans-serif";
           context.fillText(progress < 1 ? "Slowing down · moving to shoulder" : "Stopped on shoulder", half + 16, 246);
           if (progress < 1) pullOverFrame = requestAnimationFrame(draw);
-          else pullOverFrame = null;
+          else {
+            pullOverFrame = null;
+            pullOverCompleted = true;
+          }
         };
         pullOverFrame = requestAnimationFrame(draw);
       }
@@ -835,7 +890,7 @@
                 if (result.gesture_action && result.gesture_authorized) {
                   executeCockpitCommand(result.gesture_action, "gestureActionMessage");
                 } else {
-                  setText("gestureActionMessage", "Gesture ignored: Eyes on road is not confirmed.");
+                  setText("gestureActionMessage", result.gesture_reason || "Gesture ignored: Eyes on road must be Yes to dismiss an alarm.");
                 }
               }
             }
@@ -946,31 +1001,15 @@
         if (cameraStream) document.getElementById("stopCamera").click();
       });
 
-      document.getElementById("sendNotification").addEventListener("click", async () => {
-        const message = document.getElementById("notificationText").value.trim();
-        if (!message) return;
-        try {
-          const response = await fetch(`${API_URL}/api/notifications`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ title: message, message, priority: document.getElementById("notificationPriority").value }),
-          });
-          if (!response.ok) throw new Error("Notification request failed");
-          const result = await response.json();
-          setText("notificationMessage", result.status === "queued" ? `Queued while attention is away (${result.pending} pending).` : `Shown immediately: ${message}`);
-          refreshDashboard();
-        } catch (error) {
-          setText("notificationMessage", `Could not send demo notification: ${error.message}`);
-        }
-      });
-
       const SpeechRecognitionClass = window.SpeechRecognition || window.webkitSpeechRecognition;
       let voiceRecognition = null;
       let voiceEnabled = false;
 
-      function executeCockpitCommand(command, outputId) {
+      function executeCockpitCommand(command, outputId, recipient = null) {
         if (command === "dismiss alarm") {
-          if (currentAlarmActive) {
+          if (currentOccupantAlarmActive) {
+            setText(outputId, "Occupant alert remains active until ignition is ON or the person is no longer visible.");
+          } else if (currentAlarmActive) {
             alarmSilenced = true;
             stopAlarmTone();
             setText(outputId, "Alarm sound silenced. The visual warning remains until the safety condition clears.");
@@ -981,21 +1020,49 @@
           const tracks = playlists[activePlaylist] || playlists["Focus Flow"];
           trackIndex = (trackIndex + 1) % tracks.length;
           renderNowPlaying();
-          setText(outputId, "Advanced to the next demo track.");
+          const message = `Next track is playing: ${tracks[trackIndex]}`;
+          setText(outputId, message);
+          showCockpitToast(message, "track");
         } else {
-          setText(outputId, "Phone call command accepted (demo only; no call was placed).");
+          if (!recipient) {
+            setText(outputId, "Say “Call” followed by the person's name.");
+            return;
+          }
+          const displayName = recipient.replace(/\b\w/g, (letter) => letter.toUpperCase());
+          const message = `Calling ${displayName}`;
+          setText(outputId, `${message} · demo only; no phone call was placed.`);
+          showCockpitToast(message, "phone");
+          speakDashboardMessage(`${message}.`);
         }
       }
 
       async function processVoiceTranscript(transcript) {
         const spoken = transcript.toLowerCase().replace(/[.,!?]/g, " ").replace(/\s+/g, " ").trim();
-        const commands = [
-          ["dismiss alarm", /\bdismiss\s+(the\s+)?alarm\b/],
-          ["next track", /\bnext\s+(track|song)\b/],
-          ["phone call", /\b(phone\s+call|call\s+phone)\b/],
-        ];
-        const match = commands.find(([, pattern]) => pattern.test(spoken));
-        if (!match) {
+        let command = null;
+        let recipient = null;
+        if (/\bdismiss\s+(the\s+)?alarm\b/.test(spoken)) {
+          command = "dismiss alarm";
+        } else if (/\bnext\s+(track|song)\b/.test(spoken)) {
+          command = "next track";
+        } else {
+          const callPhrase = spoken.replace(/\b(call|phone\s+call(?:\s+to)?)\s+(?:a\s+)?person\s+/g, "$1 ");
+          const callMatch = callPhrase.match(/\b(?:call|phone\s+call(?:\s+to)?)\s+(?:a\s+)?([a-z][a-z'-]*(?:\s+[a-z][a-z'-]*){0,2})\b/);
+          if (callMatch) {
+            recipient = callMatch[1]
+              .replace(/\s+(please|now|for me)$/, "")
+              .trim();
+            if (!recipient) {
+              setText("voiceActionMessage", "Please say a person's name, for example “Call Mohan”.");
+              return;
+            }
+            command = "phone call";
+          }
+        }
+        if (!command) {
+          if (/\bphone\s+call\b|\bcall\b/.test(spoken)) {
+            setText("voiceActionMessage", "Please say a person's name, for example “Call Mohan”.");
+            return;
+          }
           setText("voiceActionMessage", `Command not recognized: “${transcript}”`);
           return;
         }
@@ -1004,16 +1071,16 @@
           const response = await fetch(`${API_URL}/api/voice/authorize`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ command: match[0] }),
+            body: JSON.stringify({ command }),
           });
           const authorization = await response.json();
           if (!response.ok) throw new Error(authorization.detail || "Voice command check failed");
           if (!authorization.authorized) {
-            setText("voiceActionMessage", `${match[0]} ignored: Eyes on road is not confirmed.`);
+            setText("voiceActionMessage", `${command} ignored: ${authorization.reason}`);
             return;
           }
 
-          executeCockpitCommand(match[0], "voiceActionMessage");
+          executeCockpitCommand(command, "voiceActionMessage", recipient);
           setText("voiceStatus", `Heard: “${transcript}”`);
         } catch (error) {
           setText("voiceActionMessage", error.message);
@@ -1030,7 +1097,7 @@
         gestureEnabled = !gestureEnabled;
         gestureToggle.textContent = gestureEnabled ? "Stop gesture control" : "Start gesture control";
         setText("gestureStatus", gestureEnabled
-          ? "Gesture control active. Hold a gesture for about 1 second."
+          ? "Gesture control active. Show thumbs up to dismiss an alarm. Eyes on road must be Yes to dismiss."
           : "Gesture control is off.");
         if (!gestureEnabled) setText("gestureActionMessage", "");
       });

@@ -6,15 +6,14 @@ from time import monotonic
 class SafetyEngine:
     """Temporal filtering and safety decisions for successive perception frames."""
 
-    DROWSINESS_ALARM_CONFIRM_SECONDS = 5.0
-    PULL_OVER_AFTER_WARNING_SECONDS = 10.0
+    PULL_OVER_YAWNS_PER_MINUTE = 5
     ATTENTION_CALIBRATION_SAMPLES = 12
     LOOKAWAY_CONFIRM_SECONDS = 1.5
     ATTENTION_RECOVERY_SECONDS = 0.8
-    ALARM_CONFIRM_FRAMES = 4
+    ALARM_CONFIRM_FRAMES = 5
     YAWN_MAR_THRESHOLD = 0.52
     YAWN_RELEASE_THRESHOLD = 0.42
-    YAWN_CONFIRM_SECONDS = 0.45
+    YAWN_CONFIRM_FRAMES = 4
     YAWN_CLOSE_CONFIRM_SECONDS = 0.3
 
     def __init__(self):
@@ -29,6 +28,7 @@ class SafetyEngine:
         self.yawns = deque()
         self.yawn_active = False
         self.yawning = False
+        self.yawn_open_frames = 0
         self.yawn_end_since = None
         self.drowsy = False
         self.distracted = False
@@ -39,6 +39,7 @@ class SafetyEngine:
         self.last_frame_at = None
         self.alarm_candidate_frames = 0
         self.missing_face_frames = 0
+        self.pull_over_latched = False
 
     def recalibrate_attention(self):
         """Relearn the driver's forward head pose from the next stable frames."""
@@ -59,12 +60,17 @@ class SafetyEngine:
         if self.last_frame_at is not None and now - self.last_frame_at > 1.5:
             self.closed_since = self.yawn_since = self.lookaway_since = None
             self.drowsy_candidate_since = None
+            self.yawn_open_frames = 0
             # Reset timers/counts that depend on uninterrupted frames without
             # discarding a still-active alarm or missing-face streak.
             if not self.drowsy and not self.distracted:
                 self.alarm_candidate_frames = 0
                 self.alarm_since = None
         self.last_frame_at = now
+        while self.yawns and now - self.yawns[0] > 60:
+            self.yawns.popleft()
+        if len(self.yawns) >= self.PULL_OVER_YAWNS_PER_MINUTE:
+            self.pull_over_latched = True
 
         if not result["face_detected"]:
             self.closed_since = self.yawn_since = self.lookaway_since = None
@@ -76,6 +82,7 @@ class SafetyEngine:
             alarm = self.alarm_candidate_frames >= self.ALARM_CONFIRM_FRAMES
             self.alarm_since = (self.alarm_since or now) if alarm else None
             self.yawning = False
+            self.yawn_open_frames = 0
             return self._state(False, False, None, None, now=now, alarm=alarm)
 
         if self.missing_face_frames:
@@ -100,8 +107,9 @@ class SafetyEngine:
         if mar is not None and mar >= self.YAWN_MAR_THRESHOLD:
             self.yawn_end_since = None
             if not self.yawn_active:
+                self.yawn_open_frames += 1
                 self.yawn_since = self.yawn_since or now
-                if now - self.yawn_since >= self.YAWN_CONFIRM_SECONDS:
+                if self.yawn_open_frames >= self.YAWN_CONFIRM_FRAMES:
                     self.yawns.append(now)
                     self.yawn_active = True
                     self.yawning = True
@@ -113,24 +121,22 @@ class SafetyEngine:
                     self.yawn_end_since = None
                     self.yawn_active = False
                     self.yawning = False
+                    self.yawn_open_frames = 0
             else:
                 self.yawn_since = None
                 self.yawning = False
+                self.yawn_open_frames = 0
         else:
             # Keep a detected yawn active across small score fluctuations.
             self.yawn_end_since = None
             if not self.yawn_active:
                 self.yawn_since = None
-        while self.yawns and now - self.yawns[0] > 60:
-            self.yawns.popleft()
+                self.yawn_open_frames = 0
         repeated_yawns = len(self.yawns) >= 3
         drowsiness_candidate = eye_closure_candidate or repeated_yawns
         if drowsiness_candidate:
             self.drowsy_candidate_since = self.drowsy_candidate_since or now
-            # Three distinct yawn events can update the visible state; the
-            # alarm still waits for a sustained 5-second drowsy condition.
-            if repeated_yawns or now - self.drowsy_candidate_since >= self.DROWSINESS_ALARM_CONFIRM_SECONDS:
-                self.drowsy = True
+            self.drowsy = repeated_yawns or now - self.drowsy_candidate_since >= 5.0
         else:
             self.drowsy_candidate_since = None
             if ear is not None and ear > 0.24 and (mar is None or mar < 0.55):
@@ -189,12 +195,7 @@ class SafetyEngine:
                 # hysteresis-filtered distraction state rather than one noisy frame.
                 eyes_on_road = not self.distracted
 
-        sustained_drowsiness = (
-            self.drowsy
-            and self.drowsy_candidate_since is not None
-            and now - self.drowsy_candidate_since >= self.DROWSINESS_ALARM_CONFIRM_SECONDS
-        )
-        alert_candidate = sustained_drowsiness or self.distracted or eyes_on_road is False
+        alert_candidate = self.drowsy or self.distracted or eyes_on_road is False
         self.alarm_candidate_frames = self.alarm_candidate_frames + 1 if alert_candidate else 0
         alarm = self.alarm_candidate_frames >= self.ALARM_CONFIRM_FRAMES
         self.alarm_since = (self.alarm_since or now) if alarm else None
@@ -204,7 +205,6 @@ class SafetyEngine:
         )
 
     def _state(self, present, eyes, ear, mar, yaw=None, pitch=None, now=None, alarm=False, emotion="calm"):
-        elapsed = (now - self.alarm_since) if alarm and self.alarm_since and now else 0
         return {
             "presence": "Detected" if present else "Not detected",
             "face_detected": present,
@@ -216,12 +216,15 @@ class SafetyEngine:
             "emotion": emotion,
             "yawning": self.yawning,
             "yawn_count_60s": len(self.yawns),
+            "pull_over_triggered": self.pull_over_latched,
+            "pull_over_reason": "repeated_yawning" if self.pull_over_latched else None,
+            "pull_over_safety_check": "assumed_clear_demo" if self.pull_over_latched else None,
             "alarm_confirmation_frames": self.alarm_candidate_frames,
             "head_pose": {"yaw_degrees": yaw, "pitch_degrees": pitch},
             "attention_calibration_remaining": max(
                 0, self.ATTENTION_CALIBRATION_SAMPLES - self.baseline_samples
             ),
             "alarm_active": alarm,
-            "alarm_escalation": "pull_over" if elapsed >= self.PULL_OVER_AFTER_WARNING_SECONDS else ("warning" if alarm else "none"),
+            "alarm_escalation": "pull_over" if self.pull_over_latched else ("warning" if alarm else "none"),
             "camera_connected": present,
         }

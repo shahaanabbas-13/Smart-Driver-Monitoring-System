@@ -9,21 +9,20 @@ Reviewed source: `stellantis-smart-cockpit-main.zip` (the ZIP supplied in Downlo
 | Live dashboard and camera | Light HTML dashboard; browser camera frames go to FastAPI | Implemented; dashboard and API smoke-checked |
 | Presence, EAR drowsiness, MAR yawns | MediaPipe Face Landmarker; EAR and averaged mouth opening; distinct yawns counted over 60 seconds | Implemented; synthetic state-machine coverage; camera calibration still required |
 | Head-pose distraction and eyes-on-road | Forward calibration, gaze/frontality/head pose, confirmation and recovery timing | Implemented; webcam gaze remains an estimate |
-| Alarm and pull-over escalation | 4 consecutive alert frames; drowsy alarm also waits for the existing 5-second condition; pull-over remains a visual simulation after sustained warning | Implemented in decision logic; validated with deterministic clock tests |
-| Notification gate | Non-critical notices wait unless fresh face/eyes-on-road is confirmed; critical notices pass | Implemented; notices are demo API events, not a real phone integration |
+| Alarm and pull-over escalation | Alarm after 5 consecutive warning frames; pull-over only after 5 confirmed yawns in a rolling 60 seconds, with 4 consecutive frames required per yawn | Implemented in decision logic; validated with deterministic clock tests; roadside clearance is assumed in the demo |
 | Driver recognition and enrollment | OpenCV LBPH, 40 samples, local SQLite, registration UI; recognition is smoothed across recent frames; maximum is 8 profiles per the later user request (the ZIP originally specified 2) | Implemented; SQLite migration and profile CRUD tested; no live enrollment run here |
 | Per-driver personalization | Light accent, demo temperature, and playlist saved with a profile and selected after recognition | Implemented; temperature/audio are UI demo values, not vehicle controls |
 | Emotion heuristic and ambient feedback | Geometry-based calm/stressed/tired hint; changes ambient tint and demo playlist | Implemented as a rough visual heuristic, not validated emotion inference |
-| Voice commands | Browser speech recognition commands are gated by fresh Eyes on Road status | Implemented in UI/API; browser/microphone required for live check |
-| Gesture control | MediaPipe; stable pose gate; actions require eyes-on-road | Implemented; fixed a response-field mismatch that prevented triggering |
-| Occupant-left-behind | Simulated ignition-off timer and current face presence | Implemented; stale camera state no longer counts as current presence |
+| Voice commands | Dismiss Alarm requires fresh Eyes on Road = Yes; Next Track and Phone Call are not gaze-gated; Next Track selects from a 36-title demo playlist | Implemented in UI/API; browser/microphone required for live check; no audio tracks or phone integration |
+| Gesture control | MediaPipe thumbs-up only; stable pose gate; dismissal requires Eyes on Road = Yes | Implemented; other poses are ignored |
+| Occupant-left-behind | 9 seconds of continuous, fresh face detection while ignition is off; distinct pulsing tone and spoken alert persist until ignition is turned on or the occupant is no longer visible | Implemented; stale camera state no longer counts as current presence |
 | AR face overlay | Browser canvas draws face brackets and landmark points over camera preview | Implemented |
 | Phase 5 deployment | Pinned dependencies, Dockerfile, Compose loopback bind, static dashboard serving, host/CORS allowlists, input bounds, biometric database ignored by Git | Starter deployment added; Docker build unavailable here and public deployment/authentication is not configured |
 
 ## Mistakes found and corrected
 
 - Gesture policy produced `triggered`, but the dashboard checked a different response field; gesture actions therefore never fired. API now returns the field the UI consumes.
-- Stale perception could continue to look like a detected driver and could authorize voice commands, release notifications, or satisfy the occupant timer. The API now expires camera state after 2.5 seconds and treats it as unavailable.
+- Stale perception could continue to look like a detected driver and could authorize voice commands or satisfy the occupant timer. The API now expires camera state after 2.5 seconds and treats it as unavailable.
 - Camera analysis scheduled another timeout after the stop button, so a queued frame could still be analyzed after stopping. The timer is now cancelled on start/stop and deduplicated.
 - The yawn ratio was overly diluted by side measurements and its low threshold produced false yawns on the live webcam (resting MAR median ~0.39). The center opening now has higher weight; the threshold is 0.52 with a 0.42 release threshold, yawn state has hysteresis, and three distinct yawn events update drowsiness; the alarm remains delayed.
 - SQLite context-managed connections were not explicitly closed. They now commit/rollback and close reliably, including on Windows.
@@ -32,7 +31,7 @@ Reviewed source: `stellantis-smart-cockpit-main.zip` (the ZIP supplied in Downlo
 
 ## Verification
 
-- `python -m unittest discover -s tests -v`: 9 passing state, profile, and API safety-gate tests.
+- `.venv312\Scripts\python.exe -m unittest discover -s tests -v`: 14 passing state, profile, gesture, and API safety-gate tests.
 - `python -m compileall -q backend tests`: passed.
 - Inline dashboard JavaScript syntax check: passed.
 - `python -m pip check`: passed.

@@ -71,7 +71,6 @@ def health():
 
 @app.get("/api/status")
 def cockpit_status():
-    global released_notifications
     update_occupant_state()
     snapshot = dict(latest_perception)
     fresh = perception_is_fresh()
@@ -88,8 +87,6 @@ def cockpit_status():
         snapshot["alarm_active"] = bool(snapshot.get("occupant_left_behind"))
         if not snapshot["alarm_active"]:
             snapshot["alarm_escalation"] = "none"
-    snapshot["released_notifications"] = list(released_notifications)
-    released_notifications = []
     return snapshot
 
 
@@ -115,19 +112,17 @@ def recalibrate_attention():
 # Latest frame measurements are shared with the dashboard polling endpoint.
 safety_engine = SafetyEngine()
 latest_perception = safety_engine._state(False, None, None, None)
-latest_perception.update({"eyes_on_road": "Unknown", "pending_notifications": 0})
+latest_perception.update({"eyes_on_road": "Unknown"})
 last_frame_received_at = None
-queued_notifications = []
-released_notifications = []
 driver_profiles = None
 profile_enrollment_id = None
 hand_gesture_detector = None
 gesture_action_gate = GestureActionGate()
 ignition_on = True
-ignition_off_since = None
+occupant_presence_since = None
 occupant_left_behind = False
 driver_identity_history = deque(maxlen=12)
-OCCUPANT_CONFIRM_SECONDS = 8.0
+OCCUPANT_CONFIRM_SECONDS = 9.0
 PERCEPTION_STALE_AFTER_SECONDS = 2.5
 
 
@@ -139,18 +134,26 @@ def perception_is_fresh():
 
 
 def update_occupant_state():
-    global latest_perception, occupant_left_behind
-    elapsed = monotonic() - ignition_off_since if ignition_off_since is not None else None
-    if (
+    global latest_perception, occupant_left_behind, occupant_presence_since
+    now = monotonic()
+    occupant_visible = (
         profile_enrollment_id is None
         and not ignition_on
-        and elapsed is not None
-        and elapsed >= OCCUPANT_CONFIRM_SECONDS
         and latest_perception.get("face_detected", False)
         and perception_is_fresh()
-    ):
-        occupant_left_behind = True
-    remaining = max(0, OCCUPANT_CONFIRM_SECONDS - elapsed) if elapsed is not None else None
+    )
+    if occupant_visible:
+        if occupant_presence_since is None:
+            occupant_presence_since = now
+        elapsed = now - occupant_presence_since
+        occupant_left_behind = elapsed >= OCCUPANT_CONFIRM_SECONDS
+        remaining = max(0, OCCUPANT_CONFIRM_SECONDS - elapsed)
+    else:
+        # Require a fresh, continuous detection period; clear the alarm as soon
+        # as ignition returns or the occupant is no longer visible.
+        occupant_presence_since = None
+        occupant_left_behind = False
+        remaining = None
     latest_perception.update({
         "ignition_on": ignition_on,
         "occupant_left_behind": occupant_left_behind if profile_enrollment_id is None else False,
@@ -161,17 +164,16 @@ def update_occupant_state():
 
 @app.post("/api/camera/stop")
 def camera_stopped():
-    global latest_perception, queued_notifications, released_notifications, profile_enrollment_id, last_frame_received_at, occupant_left_behind, driver_identity_history
+    global latest_perception, profile_enrollment_id, last_frame_received_at, occupant_left_behind, occupant_presence_since, driver_identity_history
     safety_engine.reset()
     last_frame_received_at = None
     profile_enrollment_id = None
     occupant_left_behind = False
+    occupant_presence_since = None
     driver_identity_history.clear()
     gesture_action_gate.reset()
-    queued_notifications = []
-    released_notifications = []
     latest_perception = safety_engine._state(False, None, None, None)
-    latest_perception.update({"presence": "Waiting", "eyes_on_road": "Unknown", "pending_notifications": 0, "released_notifications": []})
+    latest_perception.update({"presence": "Waiting", "eyes_on_road": "Unknown"})
     return {"status": "camera stopped"}
 
 
@@ -181,14 +183,10 @@ class IgnitionRequest(BaseModel):
 
 @app.post("/api/ignition")
 def set_ignition(request: IgnitionRequest):
-    global ignition_on, ignition_off_since, occupant_left_behind
+    global ignition_on, occupant_presence_since, occupant_left_behind
     ignition_on = request.ignition_on
-    if ignition_on:
-        ignition_off_since = None
-        occupant_left_behind = False
-    elif ignition_off_since is None:
-        ignition_off_since = monotonic()
-        occupant_left_behind = False
+    occupant_presence_since = None
+    occupant_left_behind = False
     update_occupant_state()
     return {
         "ignition_on": ignition_on,
@@ -260,12 +258,6 @@ def delete_driver_profile(profile_id: int):
     return {"status": "removed", "profile_id": profile_id}
 
 
-class NotificationRequest(BaseModel):
-    title: str = Field(min_length=1, max_length=120)
-    message: str = Field(default="", max_length=500)
-    priority: Literal["critical", "non-critical"] = "non-critical"
-
-
 class VoiceCommandRequest(BaseModel):
     command: str = Field(min_length=1, max_length=40)
 
@@ -277,30 +269,22 @@ def authorize_voice_command(request: VoiceCommandRequest):
     if command not in allowed_commands:
         raise HTTPException(status_code=400, detail="Unsupported voice command")
     eyes_on_road = perception_is_fresh() and latest_perception.get("eyes_on_road") == "Yes"
-    authorized = eyes_on_road and profile_enrollment_id is None
+    authorized = profile_enrollment_id is None and (
+        command != "dismiss alarm" or eyes_on_road
+    )
     return {
         "command": command,
         "authorized": authorized,
-        "reason": "Eyes on road confirmed" if authorized else "Eyes on road is not confirmed",
+        "reason": (
+            "Driver enrollment is active"
+            if profile_enrollment_id is not None
+            else "Dismiss alarm requires Eyes on road = Yes"
+            if command == "dismiss alarm" and not eyes_on_road
+            else "Eyes on road confirmed"
+            if command == "dismiss alarm"
+            else "Eyes on road is not required for this command"
+        ),
     }
-
-
-@app.post("/api/notifications")
-def submit_notification(notification: NotificationRequest):
-    global latest_perception, released_notifications
-    item = {"title": notification.title, "message": notification.message}
-    critical = notification.priority.lower() == "critical"
-    eyes_clear = (
-        perception_is_fresh()
-        and latest_perception.get("eyes_on_road") == "Yes"
-        and latest_perception.get("face_detected", False)
-    )
-    if profile_enrollment_id is None and (critical or eyes_clear):
-        released_notifications.append(item)
-        return {"status": "shown", "notification": item}
-    queued_notifications.append(item)
-    latest_perception["pending_notifications"] = len(queued_notifications)
-    return {"status": "queued", "pending": len(queued_notifications)}
 
 
 # Lazily initialize the detector when the first frame arrives.
@@ -315,7 +299,7 @@ class CameraFrame(BaseModel):
 
 @app.post("/api/perception")
 def analyze_camera_frame(frame: CameraFrame):
-    global face_perception, latest_perception, queued_notifications, released_notifications, profile_enrollment_id, hand_gesture_detector, last_frame_received_at
+    global face_perception, latest_perception, profile_enrollment_id, hand_gesture_detector, last_frame_received_at
 
     # Browser sends a data URL such as data:image/jpeg;base64,...
     encoded = frame.image.split(",", 1)[-1]
@@ -346,8 +330,6 @@ def analyze_camera_frame(frame: CameraFrame):
         if profile_enrollment_id != frame.enrollment_id:
             safety_engine.reset()
             driver_identity_history.clear()
-            queued_notifications.extend(released_notifications)
-            released_notifications = []
         profile_enrollment_id = frame.enrollment_id
         latest_perception = safety_engine._state(
             result["face_detected"], None, result["ear"], result["mar"]
@@ -439,13 +421,6 @@ def analyze_camera_frame(frame: CameraFrame):
         "driver_settings": driver_settings,
         "camera_connected": True,
     })
-    latest_perception["pending_notifications"] = len(queued_notifications)
-    if (latest_perception["eyes_on_road"] == "Yes"
-            and latest_perception.get("face_detected", False)
-            and queued_notifications):
-        released_notifications.extend(queued_notifications)
-        queued_notifications = []
-        latest_perception["pending_notifications"] = 0
     # Face landmarks are sent only to the local dashboard's AR overlay.
     return {
         "face_detected": result["face_detected"],
@@ -467,6 +442,7 @@ def analyze_camera_frame(frame: CameraFrame):
         "gesture_action": gesture_result["action"],
         "gesture_authorized": gesture_result["authorized"],
         "gesture_triggered": gesture_result["triggered"],
+        "gesture_reason": gesture_result.get("reason"),
     }
 
 

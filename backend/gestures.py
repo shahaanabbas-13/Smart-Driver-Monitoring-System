@@ -44,16 +44,12 @@ class HandGestureDetector:
             and cls._distance(landmarks[4], landmarks[5]) > 0.12
         )
 
-        if all(extended) and thumb_extended:
-            return "Open Palm"
         if (
             thumb_extended
             and not any(extended)
             and landmarks[4]["y"] < landmarks[2]["y"] - 0.04
         ):
             return "Thumbs Up"
-        if sum(extended) <= 1 and not thumb_extended:
-            return "Fist"
         return "Other"
 
     def detect(self, rgb_image):
@@ -72,13 +68,9 @@ class HandGestureDetector:
 
 
 class GestureActionGate:
-    """Debounce poses and emit one action per gesture, only while eyes are on road."""
+    """Debounce supported poses; thumbs-up dismisses only while eyes are on road."""
 
-    ACTIONS = {
-        "Open Palm": "next track",
-        "Thumbs Up": "dismiss alarm",
-        "Fist": "phone call",
-    }
+    ACTIONS = {"Thumbs Up": "dismiss alarm"}
 
     def __init__(self, stable_frames=3):
         self.stable_frames = stable_frames
@@ -92,7 +84,7 @@ class GestureActionGate:
         self.emitted_for_pose = None
 
     def process(self, gesture, eyes_on_road, enabled=True):
-        if not enabled or gesture in (None, "Other"):
+        if not enabled or gesture in (None, "Other") or gesture not in self.ACTIONS:
             self.reset()
             return {"gesture": gesture, "action": None, "authorized": False, "triggered": False}
         if gesture == self.candidate:
@@ -112,4 +104,5 @@ class GestureActionGate:
             "action": action if authorized else None,
             "authorized": authorized,
             "triggered": True,
+            "reason": None if authorized else "Dismiss alarm requires Eyes on road = Yes",
         }
